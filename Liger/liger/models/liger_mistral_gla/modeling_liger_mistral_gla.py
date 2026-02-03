@@ -132,7 +132,8 @@ class LigerMistralGatedLinearAttention(nn.Module):
         recurrent_state = last_state['recurrent_state'] if last_state is not None else None
         offsets = kwargs.get('offsets', None)
         scale = 1 
-        q, k, v, g = (x.to(torch.float32).contiguous() for x in (q, k, v, g))
+        # Use native dtype instead of float32 for GH200 compatibility
+        q, k, v, g = (x.contiguous() for x in (q, k, v, g))
 
         if self.training or q.shape[-2] > 1:
             o_, recurrent_state = chunk_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)

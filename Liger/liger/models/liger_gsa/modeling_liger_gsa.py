@@ -111,7 +111,8 @@ class LigerGatedSlotAttention(nn.Module):
         recurrent_state = last_state['recurrent_state'] if last_state is not None else None
         scale = 1
 
-        q, k, v, s, g = (x.to(torch.float32).contiguous() for x in (q, k, v, s, g))
+        # Use native dtype instead of float32 for GH200 compatibility
+        q, k, v, s, g = (x.contiguous() for x in (q, k, v, s, g))
 
         if self.training or q.shape[-2] > 1:
             o_, recurrent_state = chunk_gsa(q, k, v, s, g, scale=scale, initial_state=recurrent_state, output_final_state=True)
