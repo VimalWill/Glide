@@ -187,7 +187,9 @@ class LigerGatedLinearAttention(nn.Module):
         o = rearrange(o_.bfloat16(), 'b h n d -> b n (h d)')
         o = self.o_proj(o)
 
-        return o, None, past_key_value
+        # Return only 2 values for compatibility with older LlamaDecoderLayer
+        # The cache is already updated in-place via the past_key_value object
+        return o, None
 
 class LigerGLADecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: LigerGLAConfig, layer_idx: int):
