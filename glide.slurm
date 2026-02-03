@@ -28,7 +28,8 @@ echo ""
 echo "=== PyTorch CUDA Check ==="
 python3 -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A'); print('Device count:', torch.cuda.device_count() if torch.cuda.is_available() else 0)"
 
-pip3 install -r requirements.txt
+pip3 install -r Liger/requirements.txt
+pip3 install flash-linear-attention
 
 python3 -m Liger/eval.harness --model hf \
     --model_args pretrained=linear-moe-hub/Liger-GLA-8B \
