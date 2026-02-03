@@ -162,26 +162,28 @@ class LigerGatedLinearAttention(nn.Module):
             sk = sk.to(target_dtype)
             sv = sv.to(target_dtype)
 
-        window_size = 64
-        if attention_mask is not None and 0.0 in attention_mask:
-            pass
-        else:
-            attention_mask = None
+        # Only use flash attention if available
+        if is_flash_attn_2_available():
+            window_size = 64
+            if attention_mask is not None and 0.0 in attention_mask:
+                pass
+            else:
+                attention_mask = None
 
-        y = _flash_attention_forward( # Reashape to the expected shape for Flash Attention
-            sq.transpose(1, 2),
-            sk.transpose(1, 2),
-            sv.transpose(1, 2),
-            attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=0.0,
-            sliding_window=window_size,
-            use_top_left_mask=False,
-            is_causal=True,
-            target_dtype=torch.float32,
-        ).transpose(1, 2)
-        o_ = 0.5 * y + 0.5 * o_ 
+            y = _flash_attention_forward( # Reashape to the expected shape for Flash Attention
+                sq.transpose(1, 2),
+                sk.transpose(1, 2),
+                sv.transpose(1, 2),
+                attention_mask,
+                q_len,
+                position_ids=position_ids,
+                dropout=0.0,
+                sliding_window=window_size,
+                use_top_left_mask=False,
+                is_causal=True,
+                target_dtype=torch.float32,
+            ).transpose(1, 2)
+            o_ = 0.5 * y + 0.5 * o_ 
         o = rearrange(o_.bfloat16(), 'b h n d -> b n (h d)')
         o = self.o_proj(o)
 
