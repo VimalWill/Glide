@@ -8,7 +8,7 @@
 #SBATCH --ntasks-per-socket=1
 #SBATCH --cpus-per-task=8
 #SBATCH --partition=ghx4
-#SBATCH --time=2:20:00
+#SBATCH --time=6:20:00
 #SBATCH --job-name=tiny-wiz-2
 #SBATCH --account=bewi-dtai-gh
 ### GPU options ###
@@ -29,5 +29,12 @@ echo "=== PyTorch CUDA Check ==="
 python3 -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A'); print('Device count:', torch.cuda.device_count() if torch.cuda.is_available() else 0)"
 
 pip3 install -r requirements.txt
+
+python3 -m Liger/eval.harness --model hf \
+    --model_args pretrained=linear-moe-hub/Liger-GLA-8B \
+    --tasks piqa,arc_easy,arc_challenge,hellaswag,winogrande \
+    --batch_size 64 \
+    --device cuda \
+    --seed 0
 
 python3 Scripts/test_linger.py
