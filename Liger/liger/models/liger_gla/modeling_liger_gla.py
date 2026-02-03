@@ -303,8 +303,10 @@ class LigerGLAModel(LlamaModel, LigerGLAPreTrainedModel):
 
         # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, FlaCache):
+        if use_cache and past_key_values is not None and not isinstance(past_key_values, FlaCache):
             past_key_values = FlaCache.from_legacy_cache(past_key_values)
+        elif use_cache and past_key_values is None:
+            past_key_values = FlaCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
