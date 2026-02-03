@@ -35,7 +35,7 @@ else:
     print("flash_attn_2 is not available")
 
 from fla.models.utils import Cache as FlaCache
-from fla.ops.gla import fused_chunk_gla, fused_recurrent_gla
+from fla.ops.gla import chunk_gla, recurrent_gla
 
 from .configuration_liger_gla import LigerGLAConfig
 
@@ -116,9 +116,9 @@ class LigerGatedLinearAttention(nn.Module):
         q, k, v, g = (x.to(torch.float32).contiguous() for x in (q, k, v, g))
 
         if self.training or q.shape[-2] > 1:
-            o_, recurrent_state = fused_chunk_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)
+            o_, recurrent_state = chunk_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)
         else:
-            o_, recurrent_state = fused_recurrent_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)
+            o_, recurrent_state = recurrent_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)
 
         if past_key_value is not None:
             past_key_value.update(
