@@ -1,5 +1,11 @@
 import sys
+import os
 from pathlib import Path
+
+# Set environment variables BEFORE importing torch/CUDA
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TRITON_CACHE_DIR"] = "/tmp/triton_cache"
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -10,10 +16,8 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from Liger.liger.models.liger_gla.modeling_liger_gla import LigerGLAForCausalLM
 from Liger.liger.models.liger_gsa import LigerGSAForCausalLM
-import os
 from tqdm import tqdm
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 device = 'cuda:0'
 
 
