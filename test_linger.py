@@ -2,8 +2,8 @@ import torch
 import time
 import pandas as pd
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from ..Linearization.liger.models.liger_gla.modeling_liger_gla import LigerGLAForCausalLM
-from ..Linearization.liger.models.liger_gsa import LigerGSAConfig, LigerGSAForCausalLM, LigerGSAModel
+from Linearization.liger.models.liger_gla.modeling_liger_gla import LigerGLAForCausalLM
+from Linearization.liger.models.liger_gsa import LigerGSAConfig, LigerGSAForCausalLM, LigerGSAModel
 import os
 from tqdm import tqdm
 
