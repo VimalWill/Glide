@@ -1,5 +1,25 @@
-from fla.ops.gla import fused_chunk_gla
-from fla.ops.gla import fused_recurrent_gla
+import importlib
+import inspect
+
+# Resolve GLA implementations (prefer non-deprecated names)
+gla_mod = importlib.import_module("fla.ops.gla")
+if hasattr(gla_mod, "chunk_gla"):
+    fused_chunk_gla = getattr(gla_mod, "chunk_gla")
+    print("Using `chunk_gla` from fla.ops.gla")
+elif hasattr(gla_mod, "fused_chunk_gla"):
+    fused_chunk_gla = getattr(gla_mod, "fused_chunk_gla")
+    print("Using `fused_chunk_gla` from fla.ops.gla (deprecated)")
+else:
+    raise ImportError("Neither `chunk_gla` nor `fused_chunk_gla` found in fla.ops.gla")
+
+if hasattr(gla_mod, "recurrent_gla"):
+    fused_recurrent_gla = getattr(gla_mod, "recurrent_gla")
+    print("Using `recurrent_gla` from fla.ops.gla")
+elif hasattr(gla_mod, "fused_recurrent_gla"):
+    fused_recurrent_gla = getattr(gla_mod, "fused_recurrent_gla")
+    print("Using `fused_recurrent_gla` from fla.ops.gla")
+else:
+    raise ImportError("Neither `recurrent_gla` nor `fused_recurrent_gla` found in fla.ops.gla")
 
 import torch
 
@@ -12,10 +32,16 @@ def test_fla_ops():
     head_dim = 64
 
     # Create input tensors (b, h, n, d) format
-    q = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32)
-    k = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32)
-    v = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32)
-    g = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32)
+    # Choose device: Triton-backed ops require CUDA; otherwise skip heavy tests.
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device.type == "cpu":
+        print("CUDA not available — skipping Triton-backed GLA tests (requires GPU).")
+        return None, None
+
+    q = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32, device=device)
+    k = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32, device=device)
+    v = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32, device=device)
+    g = torch.randn(batch_size, num_heads, seq_len, head_dim, dtype=torch.float32, device=device)
 
     # Apply normalizations (as done in the model)
     q = torch.softmax(q, dim=-1)
@@ -29,12 +55,34 @@ def test_fla_ops():
 
     # Test fused_chunk_gla
     print("Testing fused_chunk_gla...")
-    o_chunk, state_chunk = fused_chunk_gla(
-        q, k, v, g,
-        scale=scale,
-        initial_state=None,
-        output_final_state=True
-    )
+    # Diagnostic: show callable info
+    try:
+        sig = inspect.signature(fused_chunk_gla)
+    except (ValueError, TypeError):
+        sig = None
+    print("fused_chunk_gla ->", type(fused_chunk_gla), "callable=", callable(fused_chunk_gla), "signature=", sig)
+
+    # Try positional call, then fallback to keyword-only call if it fails.
+    try:
+        o_chunk, state_chunk = fused_chunk_gla(
+            q, k, v, g,
+            scale=scale,
+            initial_state=None,
+            output_final_state=True
+        )
+    except TypeError as e:
+        print("Positional call failed:", e)
+        try:
+            o_chunk, state_chunk = fused_chunk_gla(
+                q=q, k=k, v=v, g=g,
+                scale=scale,
+                initial_state=None,
+                output_final_state=True
+            )
+            print("Called fused_chunk_gla using keyword args fallback.")
+        except Exception as e2:
+            print("Keyword fallback failed:", e2)
+            raise
 
     assert o_chunk.shape == (batch_size, num_heads, seq_len, head_dim), \
         f"Expected shape {(batch_size, num_heads, seq_len, head_dim)}, got {o_chunk.shape}"
