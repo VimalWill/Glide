@@ -1,0 +1,7 @@
+torch
+triton
+transformers
+datasets
+peft
+evaluate
+omegaconf
