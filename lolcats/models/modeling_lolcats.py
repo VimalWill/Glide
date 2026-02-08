@@ -47,7 +47,7 @@ from fla.modules.feature_map import (
     T2RFeatureMap,
 )
 from fla.ops.linear_attn.utils import normalize_output
-from lolcats.models.lolcats.configuration_lolcats import LolcatsConfig
+from .config import LolcatsConfig
 
 logger = logging.get_logger(__name__)
 
