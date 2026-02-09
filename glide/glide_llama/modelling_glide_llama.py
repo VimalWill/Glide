@@ -577,7 +577,7 @@ class GlideAttention(LinearAttention):
 
             # 2. Compute "predicted" attention outputs
             # compute attn weights under sliding window
-            window_factors = F.sigmoid(self.window_factors)
+            window_factors = torch.sigmoid(self.window_factors)
             linear_factors = 1 - window_factors if self.affine_attention_factors else 1
             y_pred, a_pred = hybrid_attention_quadratic(q, k, f_q, f_k, v,
                                                       window_factors, linear_factors,
@@ -588,7 +588,7 @@ class GlideAttention(LinearAttention):
             attn_weights = None
             # attention_mask = None  # For now this is always True
             if past_key_value is None:  # Regular training
-                window_factors = F.sigmoid(self.window_factors)
+                window_factors = torch.sigmoid(self.window_factors)
                 linear_factors = 1 - window_factors if self.affine_attention_factors else 1
                 y_true, a_pred = hybrid_attention_quadratic(q, k, f_q, f_k, v,
                                                           window_factors, linear_factors,
@@ -604,7 +604,7 @@ class GlideAttention(LinearAttention):
                     k_cache, v_cache, f_kv_state, f_k_state = _kv
 
                     # Sliding window + linear attention decode
-                    window_factors = F.sigmoid(self.window_factors)
+                    window_factors = torch.sigmoid(self.window_factors)
                     linear_factors = 1 - window_factors if self.affine_attention_factors else 1
 
                     # Softmax attention terms
@@ -626,7 +626,7 @@ class GlideAttention(LinearAttention):
                         k_state  = past_key_value.k_states[self.layer_idx]
                     except IndexError:
                         kv_state, k_state = None, None
-                    window_factors = F.sigmoid(self.window_factors)
+                    window_factors = torch.sigmoid(self.window_factors)
                     linear_factors = 1 - window_factors if self.affine_attention_factors else 1
                     y_true, _ = hybrid_attention_quadratic(q, k, f_q, f_k, v,
                                                          window_factors, linear_factors,

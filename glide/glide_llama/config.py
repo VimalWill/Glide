@@ -8,7 +8,7 @@ from transformers.models.llama.configuration_llama import LlamaConfig
 
 class GlideConfig(LlamaConfig, PretrainedConfig):
 
-    model_type = 'glide'
+    model_type = 'glide-lolcats'
     keys_to_ignore_at_inference = ['past_key_values']
 
     def __init__(
@@ -43,7 +43,7 @@ class GlideConfig(LlamaConfig, PretrainedConfig):
         hidden_ratio: Optional[int] = 4,
         # num_heads: int = 4,
         # num_kv_heads: Optional[int] = None,
-        feature_map: str = "softmax",
+        feature_map: str = "lolcats_t2r",
         tie_feature_map_qk: bool = False,
         norm_q: bool = True,
         norm_k: bool = True,
