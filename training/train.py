@@ -7,8 +7,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import fla
-import liger
-import lolcats
+# import liger
+import glide
+# import lolcats
 import torch.utils
 import torch.utils.data
 import torch.utils.data.dataloader
@@ -24,30 +25,15 @@ from training.dataloader import load_data
 def train(config):
 
     trainer = FinetuneTrainer
-    if config.model.name == "liger_gla":
-        from liger.models.liger_gla import LigerGLAConfig
-        liger_model_config = LigerGLAConfig()
-    elif config.model.name == "liger_gsa":
-        from liger.models.liger_gsa import LigerGSAConfig
-        liger_model_config = LigerGSAConfig()
-    elif config.model.name == "liger_qwen25_gla":
-        from liger.models.liger_qwen2_gla import LigerQwen2GLAConfig
-        liger_model_config = LigerQwen2GLAConfig()
-    elif config.model.name == "liger_qwen3_gla":
-        from liger.models.liger_qwen3_gla import LigerQwen3GLAConfig
-        liger_model_config = LigerQwen3GLAConfig()
-    elif config.model.name == "liger_qwen3_moe_gla":
-        from liger.models.liger_qwen3_moe_gla import LigerQwen3MoeGLAConfig
-        liger_model_config = LigerQwen3MoeGLAConfig()
-    elif config.model.name == "lolcats_at":
+    if config.model.name == "lolcats_at":
         # first stage: attention transfer
-        from lolcats.models.lolcats import LolcatsConfig
-        liger_model_config = LolcatsConfig()
+        from glide.glide_llama.config import GlideConfig
+        liger_model_config = GlideConfig()
         trainer = DefaultTrainer
     elif config.model.name == "lolcats_ar":
         # second stage
-        from lolcats.models.lolcats import LolcatsConfig
-        liger_model_config = LolcatsConfig()
+        from glide.glide_llama.config import GlideConfig
+        liger_model_config = GlideConfig()
     else:
         raise NotImplementedError(config.model.name)
     
