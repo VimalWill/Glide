@@ -1,1 +1,1 @@
-from modelling_glide_llama import *
+from .modelling_glide_llama import *

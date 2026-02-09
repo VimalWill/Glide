@@ -3,10 +3,12 @@
 from typing import Dict, Optional
 
 from transformers.configuration_utils import PretrainedConfig
+from transformers.modeling_rope_utils import rope_config_validation
 from transformers.models.llama.configuration_llama import LlamaConfig
 
 class GlideConfig(LlamaConfig, PretrainedConfig):
-    model_type = 'liger_gla'
+
+    model_type = 'glide'
     keys_to_ignore_at_inference = ['past_key_values']
 
     def __init__(
@@ -34,8 +36,53 @@ class GlideConfig(LlamaConfig, PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        **kwargs,
+        # linear attention
+        attn_mode: str = "fused_chunk",
+        expand_k: int = 1,
+        expand_v: int = 1,
+        hidden_ratio: Optional[int] = 4,
+        # num_heads: int = 4,
+        # num_kv_heads: Optional[int] = None,
+        feature_map: str = "softmax",
+        tie_feature_map_qk: bool = False,
+        norm_q: bool = True,
+        norm_k: bool = True,
+        norm_feature_map: bool = False,
+        elementwise_affine: Optional[bool] = True,
+        norm_eps: float = 1e-6,
+        attn: Optional[Dict] = None,
+        fuse_cross_entropy: bool = True,
+        **kwargs
     ):
+
+        # linear attention settings
+        self.attn_mode = attn_mode
+        self.expand_k = expand_k
+        self.expand_v = expand_v
+        self.hidden_ratio = hidden_ratio
+        # self.num_heads = num_heads
+        # self.num_kv_heads = num_kv_heads
+        self.feature_map = feature_map
+        self.tie_feature_map_qk = tie_feature_map_qk
+        self.norm_q = norm_q
+        self.norm_k = norm_k
+        self.norm_feature_map = norm_feature_map
+        self.max_position_embeddings = max_position_embeddings
+        self.elementwise_affine = elementwise_affine
+        self.norm_eps = norm_eps
+        self.attn = attn
+        self.fuse_cross_entropy = fuse_cross_entropy
+
+        if attn is not None:
+            if not isinstance(attn, Dict):
+                raise ValueError("attn must be a dictionary")
+            if 'layers' not in attn:
+                raise ValueError("Layer indices must be provided to initialize hybrid attention layers")
+            if 'num_heads' not in attn:
+                raise ValueError("Number of heads must be provided to initialize hybrid attention layers")
+            attn['num_kv_heads'] = attn.get('num_kv_heads', attn['num_heads'])
+            attn['window_size'] = attn.get('window_size', None)
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -61,3 +108,5 @@ class GlideConfig(LlamaConfig, PretrainedConfig):
             head_dim=head_dim,
             **kwargs,
         )
+
+        
