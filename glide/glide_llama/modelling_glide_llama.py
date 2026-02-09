@@ -347,7 +347,7 @@ class LinearAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads # 8
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads # 32/8=4
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+        self.rope_theta = config.rope_parameters.get('rope_theta', 10000.0) if config.rope_parameters else 10000.0
         self.is_causal = True
 
         # linear attention settings
@@ -643,7 +643,7 @@ class GlideAttention(LinearAttention):
             # Concatenate heads and apply output projection
             y_true = y_true.transpose(1, 2).contiguous().view(b, l, self.hidden_size)
             y_true = self.o_proj(y_true)
-        return y_true, attn_weights, past_key_value
+        return y_true, (attn_weights, past_key_value)
 
 class GlideDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GlideConfig, layer_idx: int):
@@ -672,7 +672,7 @@ class GlideDecoderLayer(LlamaDecoderLayer):
 
             hidden_states = self.input_layernorm(hidden_states)
 
-            hidden_states, attns, present_key_value = self.self_attn(
+            hidden_states, (attns, present_key_value) = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
@@ -703,7 +703,33 @@ class GlideDecoderLayer(LlamaDecoderLayer):
             return outputs
             
         else:
-            return super().forward(hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache, cache_position, position_embeddings, **kwargs)
+            residual = hidden_states
+            hidden_states = self.input_layernorm(hidden_states)
+
+            hidden_states, (_, present_key_value) = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=False,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+            hidden_states = residual + hidden_states
+
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = residual + hidden_states
+
+            outputs = (hidden_states,)
+            if use_cache:
+                outputs += (present_key_value,)
+
+            return outputs
         
 
 class GlidePreTrainedModel(LlamaPreTrainedModel):
@@ -831,9 +857,7 @@ class GlideModel(LlamaModel, GlidePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
-        )
+        causal_mask = attention_mask
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -905,6 +929,7 @@ class GlideModel(LlamaModel, GlidePreTrainedModel):
         )
 
 class GlideModelForCausalLM(LlamaForCausalLM, GlidePreTrainedModel):
+    config_class = GlideConfig
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
