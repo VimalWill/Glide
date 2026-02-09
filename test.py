@@ -1,9 +1,12 @@
 from glide.glide_llama import GlideModelForCausalLM
 from glide.glide_llama.config import GlideConfig
+import torch 
 
 def main():
     config = GlideConfig()
-    model = GlideModelForCausalLM(config)
+
+    with torch.device('cuda')
+        model = GlideModelForCausalLM(config).to(dtype=torch.bfloat16)
 
     print(model)
 
