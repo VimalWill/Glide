@@ -38,7 +38,12 @@ def encode_response(response: str, tokenizer) -> list[int]:
     return tokens
 
 def load_data(config):
-    cache_dir =  "/root/.cache" 
+    # Use HF_DATASETS_CACHE env var first, then XDG_CACHE_HOME, then user home directory
+    cache_dir = os.environ.get('HF_DATASETS_CACHE') or os.path.join(
+        os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 
+        'huggingface', 
+        'datasets'
+    )
     input_len = config.model.max_length
     concat_data = True
 
