@@ -114,11 +114,11 @@ class LolcatsHedgehogFeatureMap(nn.Module):
                 torch.softmax(x, dim=-1), torch.softmax(-x, dim=-1)
             ], dim=-1).clamp(min=self.eps)
 
-    def __init__(self, head_dim: int, num_heads: int):
+    def __init__(self, head_dim: int, num_heads: int, feature_dim: int = 64):
         super().__init__()
         self.head_dim = head_dim
         self.eps = 1e-12
-        self.mlp = self.FeatureMapMLP(head_dim=head_dim, num_heads=num_heads)
+        self.mlp = self.FeatureMapMLP(head_dim=head_dim, num_heads=num_heads, feature_dim=feature_dim)
         self.activation = self.SoftmaxDim(eps=self.eps)
 
     def forward(self, x):

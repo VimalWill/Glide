@@ -1,17 +1,15 @@
 data:
-  name: "alpaca_cleand"
+  name: "alpaca_cleaned"
   path: "yahma/alpaca-cleaned"
   batch_size: 8
   micro_batch_size: 1
   val_set_size: 200
 model:
   name: 'lolcats_ar'
-  pretrained_model_name_or_path: 'meta-llama/Meta-Llama-3-8B'  
+  pretrained_model_name_or_path: 'checkpoints/lolcats_at/best'
   max_length: 1024
-  # tokenizer
-  add_eos_token: False 
-  
-  device_map: 'auto' 
+  add_eos_token: False
+  device_map: 'auto'
 train:
   optim: 'adamw_torch'
   lr: 0.0001
