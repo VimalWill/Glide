@@ -25,6 +25,7 @@ from training.dataloader import load_data
 def train(config):
 
     trainer = FinetuneTrainer
+    model_config = AutoConfig.from_pretrained(config.model.pretrained_model_name_or_path)
     if config.model.name == "lolcats_at":
         # first stage: attention transfer
         from glide.glide_llama.config import GlideConfig
@@ -36,7 +37,8 @@ def train(config):
         liger_model_config = GlideConfig()
     else:
         raise NotImplementedError(config.model.name)
-    
+
+    liger_model_config.__dict__.update(model_config.__dict__)
     model_config = liger_model_config
     model = AutoModelForCausalLM.from_pretrained(
         config.model.pretrained_model_name_or_path, 
