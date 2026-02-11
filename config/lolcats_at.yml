@@ -12,7 +12,11 @@ model:
   device_map: 'auto'
 train:
   optim: 'adamw_torch'
-  lr: 0.0001
+  lr: 0.01
   epochs: 2
   max_grad_norm: 1.0
   output_dir: 'checkpoints'
+  train_qk: False
+  train_qk_lora: False
+  train_v: False
+  train_v_lora: False
