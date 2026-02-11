@@ -466,7 +466,7 @@ class LinearAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads # 8
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads # 32/8=4
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+        self.rope_theta = getattr(config, 'rope_theta', 500000.0)
         self.is_causal = True
 
         # linear attention settings
