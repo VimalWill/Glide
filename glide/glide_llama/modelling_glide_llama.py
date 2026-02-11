@@ -48,7 +48,6 @@ from fla.modules.feature_map import (
 )
 from fla.ops.linear_attn.utils import normalize_output
 from .config import GlideConfig
-from ..kernels.feature_map import *
 
 logger = logging.get_logger(__name__)
 
@@ -185,6 +184,126 @@ logger = logging.get_logger(__name__)
 #         """
 #         return self.forward(*args, **kwargs)
 
+class LolcatsHedgehogFeatureMap(nn.Module):
+    class FeatureMapMLP(nn.Module):
+        def __init__(
+            self,
+            num_heads: int = 32,
+            head_dim: int = 128,
+            feature_dim: int = 128,
+            dtype: torch.dtype = torch.bfloat16,
+            device: torch.device = 'cuda:0',
+            skip_connection: bool = False,
+            bias: bool = False,
+            zero_init: bool = False,
+            normal_init: bool = False,
+        ):
+            super().__init__()
+            self.num_heads = num_heads
+            self.head_dim = head_dim
+            self.feature_dim = feature_dim
+            self.dtype = dtype
+            self.device = device
+            self.skip_connection = skip_connection
+            self.bias_flag = bias  # Rename to avoid conflict
+            self.zero_init = zero_init
+            self.normal_init = normal_init
+
+            # Create one Linear layer per head
+            self.linears = nn.ModuleList([
+                nn.Linear(head_dim, feature_dim, bias=False)
+                for _ in range(num_heads)
+            ])
+            # Move linears to target device/dtype
+            # for linear in self.linears:
+            #     linear.to(device=device, dtype=dtype)
+
+            # Initialize weights
+            self.init_weights_()
+
+            # Post-init adjustments
+            if zero_init:
+                if skip_connection:
+                    self.zero_init_with_skip_()
+                else:
+                    self.zero_init_()
+            if normal_init:
+                self.normal_init_()
+
+            # Skip connection check
+            if skip_connection:
+                assert head_dim == feature_dim, (
+                    f"head_dim ({head_dim}) != feature_dim ({feature_dim})"
+                )
+
+            # Bias term (shared per head)
+            if self.bias_flag:
+                self.bias = nn.Parameter(torch.zeros(
+                    (1, num_heads, 1, 1),  # Broadcastable shape
+                    dtype=dtype, device=device
+                ))
+                nn.init.kaiming_uniform_(self.bias)
+            else:
+                self.bias = 0.0
+
+        def init_weights_(self):
+            """Initialize Linear weights with kaiming_uniform"""
+            for linear in self.linears:
+                nn.init.kaiming_uniform_(linear.weight)
+
+        def zero_init_with_skip_(self):
+            """Zero all Linear weights"""
+            for linear in self.linears:
+                nn.init.zeros_(linear.weight)
+
+        def zero_init_(self):
+            """Identity initialization when head_dim == feature_dim"""
+            if self.head_dim != self.feature_dim:
+                raise ValueError("Identity init requires head_dim == feature_dim")
+            for linear in self.linears:
+                nn.init.eye_(linear.weight)
+
+        def normal_init_(self):
+            """Normal initialization for Linear weights"""
+            for linear in self.linears:
+                nn.init.normal_(linear.weight, std=0.02)
+
+        def forward(self, x: torch.Tensor):
+            # Stack weights: (num_heads, out_dim, in_dim)
+            weights = torch.stack([l.weight for l in self.linears], dim=0)
+            # Transpose to match original einsum format: (h, d, f)
+            weights_t = weights.transpose(1, 2)
+            # Original computation
+            _x = torch.einsum('hdf,bhld->bhlf', weights_t, x) + self.bias
+            return x + _x if self.skip_connection else _x
+
+    class ReLU(nn.Module):
+        def __init__(self, eps=1e-12):
+            super().__init__()
+            self.eps = eps
+
+        def forward(self, x: torch.Tensor):
+            return F.relu(x).clamp(min=self.eps)
+
+    class SoftmaxDim(nn.Module):
+        def __init__(self, eps=1e-12):
+            super().__init__()
+            self.eps = eps
+
+        def forward(self, x: torch.Tensor):
+            return torch.cat([
+                torch.softmax(x, dim=-1), torch.softmax(-x, dim=-1)
+            ], dim=-1).clamp(min=self.eps)
+
+    def __init__(self, head_dim: int, num_heads: int):
+        super().__init__()
+        self.head_dim = head_dim
+        self.eps = 1e-12
+        self.mlp = self.FeatureMapMLP(head_dim=head_dim, num_heads=num_heads)
+        self.activation = self.SoftmaxDim(eps=self.eps)
+
+    def forward(self, x):
+        return self.activation(self.mlp(x))
 
 def causal_dot_product(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
     """
@@ -347,7 +466,7 @@ class LinearAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads # 8
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads # 32/8=4
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_parameters.get('rope_theta', 10000.0) if config.rope_parameters else 10000.0
+        self.rope_theta = config.rope_theta
         self.is_causal = True
 
         # linear attention settings
@@ -411,10 +530,6 @@ class LinearAttention(nn.Module):
         elif feature_map == 'identity':
             self.feature_map_q = nn.Identity()
             self.feature_map_k = nn.Identity()
-
-        elif feature_map == 'softmax':
-            self.feature_map_q = GlideFeatureMap()
-            self.feature_map_k = GlideFeatureMap()
         else:
             raise NotImplementedError(f"Not supported feature map `{feature_map}`.")
 
@@ -643,7 +758,7 @@ class GlideAttention(LinearAttention):
             # Concatenate heads and apply output projection
             y_true = y_true.transpose(1, 2).contiguous().view(b, l, self.hidden_size)
             y_true = self.o_proj(y_true)
-        return y_true, (attn_weights, past_key_value)
+        return y_true, attn_weights, past_key_value
 
 class GlideDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GlideConfig, layer_idx: int):
@@ -672,7 +787,7 @@ class GlideDecoderLayer(LlamaDecoderLayer):
 
             hidden_states = self.input_layernorm(hidden_states)
 
-            hidden_states, (attns, present_key_value) = self.self_attn(
+            hidden_states, attns, present_key_value = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
@@ -703,33 +818,7 @@ class GlideDecoderLayer(LlamaDecoderLayer):
             return outputs
             
         else:
-            residual = hidden_states
-            hidden_states = self.input_layernorm(hidden_states)
-
-            hidden_states, (_, present_key_value) = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=False,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-
-            hidden_states = residual + hidden_states
-
-            residual = hidden_states
-            hidden_states = self.post_attention_layernorm(hidden_states)
-            hidden_states = self.mlp(hidden_states)
-            hidden_states = residual + hidden_states
-
-            outputs = (hidden_states,)
-            if use_cache:
-                outputs += (present_key_value,)
-
-            return outputs
+            return super().forward(hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache, cache_position, position_embeddings, **kwargs)
         
 
 class GlidePreTrainedModel(LlamaPreTrainedModel):
@@ -857,7 +946,9 @@ class GlideModel(LlamaModel, GlidePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = attention_mask
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -929,7 +1020,6 @@ class GlideModel(LlamaModel, GlidePreTrainedModel):
         )
 
 class GlideModelForCausalLM(LlamaForCausalLM, GlidePreTrainedModel):
-    config_class = GlideConfig
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):

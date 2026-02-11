@@ -105,7 +105,10 @@ class DefaultTrainer():
                 
         if self.load_best_model_at_end:  # Return best checkpoint
             try:
-                model.from_pretrained(self.best_val_checkpoint_path)
+                if isinstance(model, PeftModel):
+                    model.load_adapter(self.best_val_checkpoint_path, adapter_name="default")
+                else:
+                    model.from_pretrained(self.best_val_checkpoint_path)
                 print(f'-> Loading best checkpoint from {self.best_val_checkpoint_path}')
             except FileNotFoundError as e:
                 print(e)
