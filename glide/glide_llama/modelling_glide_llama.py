@@ -758,7 +758,7 @@ class GlideAttention(LinearAttention):
             # Concatenate heads and apply output projection
             y_true = y_true.transpose(1, 2).contiguous().view(b, l, self.hidden_size)
             y_true = self.o_proj(y_true)
-        return y_true, attn_weights, past_key_value
+        return y_true, (attn_weights, past_key_value)
 
 class GlideDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GlideConfig, layer_idx: int):
@@ -787,7 +787,7 @@ class GlideDecoderLayer(LlamaDecoderLayer):
 
             hidden_states = self.input_layernorm(hidden_states)
 
-            hidden_states, attns, present_key_value = self.self_attn(
+            hidden_states, (attns, present_key_value) = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
@@ -818,8 +818,11 @@ class GlideDecoderLayer(LlamaDecoderLayer):
             return outputs
             
         else:
-            return super().forward(
-                hidden_states,
+            residual = hidden_states
+            hidden_states = self.input_layernorm(hidden_states)
+
+            hidden_states, (attns, present_key_value) = self.self_attn(
+                hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_value,
@@ -829,6 +832,20 @@ class GlideDecoderLayer(LlamaDecoderLayer):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
+
+            hidden_states = residual + hidden_states
+
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = residual + hidden_states
+
+            outputs = (hidden_states,)
+
+            if use_cache:
+                outputs += (present_key_value,)
+
+            return outputs
         
 
 class GlidePreTrainedModel(LlamaPreTrainedModel):
