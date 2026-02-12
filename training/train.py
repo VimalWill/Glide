@@ -119,7 +119,7 @@ def train(config):
             optim=config.train.optim,
             eval_strategy="steps" if config.data.val_set_size > 0 else "no",
             save_strategy="steps",
-            eval_steps=200 if config.data.val_set_size > 0 else None,
+            eval_steps=500 if config.data.val_set_size > 0 else None,
             save_steps=1000,
             logging_dir=config.train.output_dir,
             output_dir=config.train.output_dir,
