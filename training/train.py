@@ -45,6 +45,7 @@ def train(config):
     if hasattr(config.model, "attn_varient"):
         liger_model_config.attn_varient = config.model.attn_varient
     model_config = liger_model_config
+
     model = AutoModelForCausalLM.from_pretrained(
         config.model.pretrained_model_name_or_path, 
         config=model_config, 
