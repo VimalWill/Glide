@@ -23,7 +23,7 @@ def set_random_seed(seed=0):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cfg", type=str, default="config/lolcats.yml")
+    parser.add_argument("--cfg", type=str, default="config/liger.yml")
     args = parser.parse_args()
     return args
 

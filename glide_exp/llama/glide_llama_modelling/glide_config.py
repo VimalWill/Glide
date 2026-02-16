@@ -34,8 +34,10 @@ class GlideConfig(LlamaConfig, PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        attn_varient = "liger",
         **kwargs,
     ):
+        self.attn_varient = attn_varient
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
