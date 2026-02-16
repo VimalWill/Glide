@@ -7,6 +7,8 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #60 | 10:57 AM | 🔄 | Removed Auto Registration from train.py — Moved to Package __init__ | ~320 |
+| #56 | " | 🔴 | Registered GlideConfig and GlideForCausalLM with HuggingFace AutoModel | ~299 |
 | #51 | 10:54 AM | 🔴 | Fixed liger_gla Config Assignment Bug and Added attn_varient Propagation | ~329 |
 | #50 | " | 🔵 | Glide Training Pipeline Architecture Revealed | ~446 |
 </claude-mem-context>

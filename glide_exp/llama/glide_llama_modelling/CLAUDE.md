@@ -7,7 +7,10 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #58 | 10:57 AM | ⚖️ | Move AutoConfig/AutoModel Registration into glide_llama_modelling __init__.py | ~301 |
+| #63 | 11:02 AM | 🔵 | GlideAttention Implements GLA (Gated Linear Attention) with Softmax Key/Query Normalization | ~389 |
+| #60 | 10:57 AM | 🔄 | Removed Auto Registration from train.py — Moved to Package __init__ | ~320 |
+| #59 | " | 🟣 | Registered GlideConfig and GlideForCausalLM with HuggingFace Auto Classes | ~316 |
+| #58 | " | ⚖️ | Move AutoConfig/AutoModel Registration into glide_llama_modelling __init__.py | ~301 |
 | #57 | " | 🔵 | glide_llama_modelling Package Exports Confirmed | ~181 |
 | #55 | " | 🔵 | GlideForCausalLM Class Hierarchy in glide_lama.py | ~209 |
 | #54 | " | 🔵 | glide_llama_modelling Package Exports GlideConfig and GlideForCausalLM | ~193 |
@@ -26,4 +29,10 @@
 | #32 | " | 🔴 | Replaced _flash_attention_forward with sliding_window_attention in LigerAttention | ~461 |
 | #31 | 10:23 AM | 🔵 | Glide LLaMA Architecture: Hybrid GLA + Sliding Window Attention | ~701 |
 | #30 | " | 🔵 | Flash Attention vs Sliding Window Attention in Glide LLaMA | ~435 |
+
+### Feb 17, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #69 | 12:35 AM | 🔵 | Glide Project Structure: LLaMA-Based Attention Research | ~280 |
 </claude-mem-context>
