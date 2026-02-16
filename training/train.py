@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 import fla
 # import liger
-import glide
+import glide_exp
 # import lolcats
 import torch.utils
 import torch.utils.data
@@ -28,17 +28,22 @@ def train(config):
     model_config = AutoConfig.from_pretrained(config.model.pretrained_model_name_or_path)
     if config.model.name == "lolcats_at":
         # first stage: attention transfer
-        from glide.glide_llama.config import GlideConfig
+        from glide_exp.llama.glide_llama_modelling import GlideConfig
         liger_model_config = GlideConfig()
         trainer = DefaultTrainer
     elif config.model.name == "lolcats_ar":
         # second stage
-        from glide.glide_llama.config import GlideConfig
+        from glide_exp.llama.glide_llama_modelling import GlideConfig
+        liger_model_config = GlideConfig()
+    elif config.model.name == "liger_gla":
+        from glide_exp.llama.glide_llama_modelling import GlideConfig
         liger_model_config = GlideConfig()
     else:
         raise NotImplementedError(config.model.name)
 
     liger_model_config.__dict__.update(model_config.__dict__)
+    if hasattr(config.model, "attn_varient"):
+        liger_model_config.attn_varient = config.model.attn_varient
     model_config = liger_model_config
     model = AutoModelForCausalLM.from_pretrained(
         config.model.pretrained_model_name_or_path, 
