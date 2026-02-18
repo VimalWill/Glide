@@ -85,6 +85,7 @@ def main():
     print(f"Loading model from {path} ...")
     model = GlideForCausalLM.from_pretrained(path)
     tokenizer = AutoTokenizer.from_pretrained(path)
+    model = model.cuda()
     model.eval()
 
     results = _eval_model(model, tokenizer)
