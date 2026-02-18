@@ -1,3 +1,4 @@
+import torch
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM, GlideConfig
 from transformers import AutoTokenizer
 
@@ -83,7 +84,7 @@ def main():
     path = "/u/vwilliam/Glide/checkpoints/liger/best/"
 
     print(f"Loading model from {path} ...")
-    model = GlideForCausalLM.from_pretrained(path)
+    model = GlideForCausalLM.from_pretrained(path, torch_dtype=torch.bfloat16)
     tokenizer = AutoTokenizer.from_pretrained(path)
     model = model.cuda()
     model.eval()
