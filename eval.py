@@ -1,5 +1,13 @@
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM, GlideConfig
 from transformers import AutoTokenizer
+
+# Stub missing transformers symbols before lm_eval imports them
+import transformers as _transformers
+if not hasattr(_transformers, "Qwen2AudioForConditionalGeneration"):
+    _transformers.Qwen2AudioForConditionalGeneration = type(
+        "Qwen2AudioForConditionalGeneration", (), {}
+    )
+
 import lm_eval
 from lm_eval.models.huggingface import HFLM
 import json
