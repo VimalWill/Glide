@@ -146,8 +146,7 @@ class LigerAttention(nn.Module):
         scale = 1 
         q, k, v, g = (x.to(torch.float32).contiguous() for x in (q, k, v, g))
 
-        chunk_size = 64
-        if (self.training or q.shape[-2] > 1) and q.shape[-2] % chunk_size == 0:
+        if self.training:
             o_, recurrent_state = chunk_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)
         else:
             o_, recurrent_state = fused_recurrent_gla(q, k, v, g, scale=scale, initial_state=recurrent_state, output_final_state=True)
@@ -198,7 +197,7 @@ class LigerAttention(nn.Module):
             causal=True,
         )
         o_ = 0.5 * y + 0.5 * o_ 
-        o = rearrange(o_.bfloat16(), 'b h n d -> b n (h d)')
+        o = rearrange(o_.to(self.o_proj.weight.dtype), 'b h n d -> b n (h d)')
         o = self.o_proj(o)
 
         return o, None, past_key_value
