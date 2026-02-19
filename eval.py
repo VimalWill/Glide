@@ -22,7 +22,7 @@ TASKS = [
 NORM_TASKS = {"arc_challenge", "hellaswag"}
 
 
-def _eval_model(model: GlideForCausalLM, tokenizer, batch_size: int = 8):
+def _eval_model(model: GlideForCausalLM, tokenizer, batch_size: int = 1):
     lm = HFLM(pretrained=model, tokenizer=tokenizer, batch_size=batch_size)
 
     with torch.no_grad():
