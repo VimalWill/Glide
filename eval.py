@@ -31,12 +31,13 @@ NORM_TASKS = {"arc_challenge", "hellaswag"}
 def _eval_model(model: GlideForCausalLM, tokenizer, batch_size: int = 8):
     lm = HFLM(pretrained=model, tokenizer=tokenizer, batch_size=batch_size)
 
-    results = lm_eval.simple_evaluate(
-        model=lm,
-        tasks=TASKS,
-        num_fewshot=None,  # use task defaults (0-shot for most)
-        log_samples=False,
-    )
+    with torch.no_grad():
+        results = lm_eval.simple_evaluate(
+            model=lm,
+            tasks=TASKS,
+            num_fewshot=None,  # use task defaults (0-shot for most)
+            log_samples=False,
+        )
     return results
 
 
