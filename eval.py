@@ -15,12 +15,6 @@ import json
 
 
 TASKS = [
-    "piqa",
-    "arc_easy",
-    "arc_challenge",
-    "hellaswag",
-    "winogrande",
-    "mmlu",
     "wikitext",
 ]
 

@@ -77,6 +77,7 @@ class LigerAttention(nn.Module):
         self, 
         config: GlideConfig,
         layer_idx: Optional[int] = None,
+        window_size: int = 64,
     ):
         super().__init__()
         self.config = config
@@ -97,6 +98,8 @@ class LigerAttention(nn.Module):
         
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
         self.pool_g = nn.AdaptiveAvgPool1d(output_size=self.head_dim * self.num_key_value_heads)
+
+        self.window_size = window_size
 
     def forward(
         self,
@@ -190,10 +193,9 @@ class LigerAttention(nn.Module):
             sk = sk.to(target_dtype)
             sv = sv.to(target_dtype)
 
-        window_size = 64
         y = sliding_window_attention(
             sq, sk, sv,
-            window_size=window_size,
+            window_size=self.window_size,
             causal=True,
         )
         o_ = 0.5 * y + 0.5 * o_ 
@@ -203,13 +205,11 @@ class LigerAttention(nn.Module):
         return o, None, past_key_value
 
 class GlideAttention(nn.Module):
-
-    WINDOW_SIZE = 1024
-
     def __init__(
         self,
         config: GlideConfig,
         layer_idx: Optional[int] = None,
+        window_size: int = 64
     ):
         super().__init__()
         self.config = config
@@ -228,6 +228,8 @@ class GlideAttention(nn.Module):
 
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
         self._block_mask_cache = {}
+
+        self.window_size = window_size
 
     def forward(
         self,
@@ -262,7 +264,7 @@ class GlideAttention(nn.Module):
 
         o = sliding_window_attention(
             q, k, v,
-            window_size=self.WINDOW_SIZE,
+            window_size=self.window_size,
             causal=True,
             block_mask_cache=self._block_mask_cache,
         )
@@ -278,11 +280,11 @@ ATTN_VARIANTS = {
 }
 
 class GlideDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: GlideConfig, layer_idx: int):
+    def __init__(self, config: GlideConfig, layer_idx: int, window_size: int = 64):
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         attn_cls = ATTN_VARIANTS.get(config.attn_varient, GlideAttention)
-        self.self_attn = attn_cls(config=config, layer_idx=layer_idx)
+        self.self_attn = attn_cls(config=config, layer_idx=layer_idx, window_size=window_size)
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -301,10 +303,15 @@ class GlideModel(LlamaModel, GlidePreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        local_window_size = (config.global_window_size - (config.global_window_size // 4))
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [GlideDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                GlideDecoderLayer(config, layer_idx,
+                    window_size=local_window_size if layer_idx == config.num_hidden_layers - 1 else config.global_window_size)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)

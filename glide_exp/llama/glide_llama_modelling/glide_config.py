@@ -35,9 +35,11 @@ class GlideConfig(LlamaConfig, PretrainedConfig):
         mlp_bias=False,
         head_dim=None,
         attn_varient = "liger",
+        global_window_size = 64,
         **kwargs,
     ):
         self.attn_varient = attn_varient
+        self.global_window_size = global_window_size
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
