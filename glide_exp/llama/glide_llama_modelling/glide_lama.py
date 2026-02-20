@@ -304,14 +304,12 @@ class GlideModel(LlamaModel, GlidePreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         local_window_size = config.global_window_size - (config.global_window_size // 4)
-        last_window_size = config.global_window_size // 4
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [
                 GlideDecoderLayer(config, layer_idx,
-                    window_size=last_window_size if layer_idx == config.num_hidden_layers - 1
-                    else local_window_size if layer_idx == config.num_hidden_layers - 2
+                    window_size=local_window_size if layer_idx == ((config.num_hidden_layers // 2))
                     else config.global_window_size)
                 for layer_idx in range(config.num_hidden_layers)
             ]
