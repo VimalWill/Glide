@@ -5,6 +5,8 @@ from typing import Dict, Optional
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.llama.configuration_llama import LlamaConfig
 
+
+
 class GlideConfig(LlamaConfig, PretrainedConfig):
     model_type = 'glide'
     keys_to_ignore_at_inference = ['past_key_values']
@@ -36,10 +38,46 @@ class GlideConfig(LlamaConfig, PretrainedConfig):
         head_dim=None,
         attn_varient = "liger",
         global_window_size = 64,
+        layer_delta_configuration: Optional[Dict] = {
+            0:  {"window_size": 64},
+            1:  {"window_size": 64},
+            2:  {"window_size": 64},
+            3:  {"window_size": 64},
+            4:  {"window_size": 64},
+            5:  {"window_size": 64},
+            6:  {"window_size": 64},
+            7:  {"window_size": 64},
+            8:  {"window_size": 64},
+            9:  {"window_size": 64},
+            10: {"window_size": 64},
+            11: {"window_size": 64},
+            12: {"window_size": 64},
+            13: {"window_size": 64},
+            14: {"window_size": 64},
+            15: {"window_size": 64},
+            16: {"window_size": 64},
+            17: {"window_size": 64},
+            18: {"window_size": 64},
+            19: {"window_size": 64},
+            20: {"window_size": 64},
+            21: {"window_size": 64},
+            22: {"window_size": 64},
+            23: {"window_size": 64},
+            24: {"window_size": 64},
+            25: {"window_size": 64},
+            26: {"window_size": 64},
+            27: {"window_size": 64},
+            28: {"window_size": 64},
+            29: {"window_size": 64},
+            30: {"window_size": 64},
+            31: {"window_size": 16},
+        },
         **kwargs,
     ):
         self.attn_varient = attn_varient
         self.global_window_size = global_window_size
+        # Per-layer overrides: {layer_idx: {"window_size": int, ...}}
+        self.layer_delta_configuration = layer_delta_configuration or {}
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,

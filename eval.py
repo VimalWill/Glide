@@ -13,14 +13,29 @@ if not hasattr(_transformers, "Qwen2AudioForConditionalGeneration"):
 import lm_eval
 from lm_eval.models.huggingface import HFLM
 import json
+import os
 
+EXPR_ID = "31_w/4"
+RESULTS_FILE = "experiments.json"
 
 TASKS = [
     "wikitext",
+    "piqa",
+    "arc_easy",
+    "arc_challenge",
+    "hellaswag",
+    "winogrande",
+    "mmlu",
 ]
 
-# Metrics reported per task (used when printing results)
-NORM_TASKS = {"arc_challenge", "hellaswag"}
+metric_map = {
+    "piqa":          ("acc,none",),
+    "arc_easy":      ("acc,none",),
+    "arc_challenge": ("acc_norm,none",),
+    "hellaswag":     ("acc_norm,none",),
+    "winogrande":    ("acc,none",),
+    "wikitext":      ("word_perplexity,none",),
+}
 
 
 def _eval_model(model, tokenizer, batch_size: int = 8):
@@ -36,44 +51,41 @@ def _eval_model(model, tokenizer, batch_size: int = 8):
     return results
 
 
-def _print_results(results: dict):
-    print("\n" + "=" * 60)
-    print(f"{'Task':<20} {'Metric':<20} {'Value':>8}")
-    print("=" * 60)
-
+def _extract_metrics(results: dict) -> dict:
     task_results = results["results"]
-
-    metric_map = {
-        "piqa":          ("acc,none",     "acc_norm,none"),
-        "arc_easy":      ("acc,none",     "acc_norm,none"),
-        "arc_challenge": ("acc_norm,none","acc_norm,none"),
-        "hellaswag":     ("acc_norm,none","acc_norm,none"),
-        "winogrande":    ("acc,none",     "acc,none"),
-        "wikitext":      ("word_perplexity,none", "word_perplexity,none"),
-    }
-
-    for task, (primary, _) in metric_map.items():
+    out = {}
+    for task, (primary,) in metric_map.items():
         if task not in task_results:
             continue
-        tr = task_results[task]
-        val = tr.get(primary, tr.get("acc,none", "N/A"))
-        label = "PPL" if task == "wikitext" else ("acc_norm" if "norm" in primary else "acc")
-        if isinstance(val, float):
-            print(f"{task:<20} {label:<20} {val:>8.4f}")
-        else:
-            print(f"{task:<20} {label:<20} {str(val):>8}")
-
-    # MMLU: aggregate over subtasks
+        out[task] = task_results[task].get(primary)
     mmlu_accs = [
         v.get("acc,none", v.get("acc_norm,none"))
         for k, v in task_results.items()
         if k.startswith("mmlu") and isinstance(v, dict)
     ]
     if mmlu_accs:
-        avg = sum(mmlu_accs) / len(mmlu_accs)
-        print(f"{'mmlu (avg)':<20} {'acc':<20} {avg:>8.4f}")
+        out["mmlu"] = sum(mmlu_accs) / len(mmlu_accs)
+    return out
 
+
+def _print_results(metrics: dict):
+    print("\n" + "=" * 60)
+    print(f"{'Task':<20} {'Value':>8}")
     print("=" * 60)
+    for task, val in metrics.items():
+        print(f"{task:<20} {val:>8.4f}" if isinstance(val, float) else f"{task:<20} {str(val):>8}")
+    print("=" * 60)
+
+
+def _save_results(expr_id: str, metrics: dict):
+    data = {}
+    if os.path.exists(RESULTS_FILE):
+        with open(RESULTS_FILE) as f:
+            data = json.load(f)
+    data[expr_id] = metrics
+    with open(RESULTS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"Results saved to {RESULTS_FILE} under key '{expr_id}'")
 
 
 def _load_and_eval(name: str, path: str, model_cls, out_path: str):
@@ -85,10 +97,9 @@ def _load_and_eval(name: str, path: str, model_cls, out_path: str):
     model = model.cuda()
     model.eval()
     results = _eval_model(model, tokenizer)
-    _print_results(results)
-    with open(out_path, "w") as f:
-        json.dump(results, f, indent=2, default=str)
-    print(f"Full results saved to {out_path}")
+    metrics = _extract_metrics(results)
+    _print_results(metrics)
+    _save_results(name, metrics)
     del model
     torch.cuda.empty_cache()
     return results
