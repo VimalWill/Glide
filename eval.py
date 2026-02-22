@@ -25,8 +25,8 @@ TASKS = [
     "arc_challenge",
     "hellaswag",
     "winogrande",
-    "mmlu",
 ]
+TASKS_5SHOT = ["mmlu"]
 
 metric_map = {
     "piqa":          ("acc,none",),
@@ -43,11 +43,13 @@ def _eval_model(model, tokenizer, batch_size: int = 8):
 
     with torch.no_grad():
         results = lm_eval.simple_evaluate(
-            model=lm,
-            tasks=TASKS,
-            num_fewshot=None,  # use task defaults (0-shot for most)
-            log_samples=False,
+            model=lm, tasks=TASKS, num_fewshot=None, log_samples=False,
         )
+        results_5shot = lm_eval.simple_evaluate(
+            model=lm, tasks=TASKS_5SHOT, num_fewshot=5, log_samples=False,
+        )
+
+    results["results"].update(results_5shot["results"])
     return results
 
 
