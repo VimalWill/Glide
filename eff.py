@@ -1,10 +1,13 @@
 import torch
-import time
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM
 import os
 from tqdm import tqdm
+
+N_RUNS = 5
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 device = 'cuda:0'
@@ -43,33 +46,36 @@ for config in model_configs:
         torch.cuda.reset_peak_memory_stats()
 
 
-        with torch.no_grad():
-            start_event = torch.cuda.Event(enable_timing=True)
-            end_event = torch.cuda.Event(enable_timing=True)
-            start_event.record()
+        run_latencies = []
+        for _ in range(N_RUNS):
+            with torch.no_grad():
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()
 
-            output = model.generate(
-                input_ids=input_ids,
-                max_new_tokens=gen_len,
-                do_sample=False,
-                use_cache=True
-            )
+                model.generate(
+                    input_ids=input_ids,
+                    max_new_tokens=gen_len,
+                    do_sample=False,
+                    use_cache=True
+                )
 
-            end_event.record()
-            torch.cuda.synchronize()
-            latency = start_event.elapsed_time(end_event) / 1000.0  
+                end_event.record()
+                torch.cuda.synchronize()
+                run_latencies.append(start_event.elapsed_time(end_event) / 1000.0)
 
-        max_mem_bytes = torch.cuda.max_memory_allocated()
-        max_mem_gb = max_mem_bytes / 1024 / 1024 / 1024
+        latency_mean = np.mean(run_latencies)
+        latency_std  = np.std(run_latencies)
+        max_mem_gb = torch.cuda.max_memory_allocated() / 1024 ** 3
+        tps_mean = gen_len / latency_mean
 
-        tps = gen_len / latency
-        print(f"{config['name']} | Tokens: {gen_len}, Time: {latency:.2f}s, TPS: {tps:.1f}, Mem: {max_mem_gb:.2f}GB")
-        results.append((config["name"], gen_len, latency, tps, max_mem_gb))
+        print(f"{config['name']} | Tokens: {gen_len}, Time: {latency_mean:.2f}±{latency_std:.3f}s, TPS: {tps_mean:.1f}, Mem: {max_mem_gb:.2f}GB")
+        results.append((config["name"], gen_len, latency_mean, latency_std, tps_mean, max_mem_gb))
 
     all_results.extend(results)
 
 
-df = pd.DataFrame(all_results, columns=["Model", "Decoding Length", "Latency (s)", "Tokens/sec", "Memory (GB)"])
+df = pd.DataFrame(all_results, columns=["Model", "Decoding Length", "Latency (s)", "Latency Std", "Tokens/sec", "Memory (GB)"])
 print("\n=== Benchmark Results ===")
 print(df.to_string(index=False))
 df.to_csv("eff_results.csv", index=False)
