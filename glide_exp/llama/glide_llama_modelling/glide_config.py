@@ -70,7 +70,7 @@ class GlideConfig(LlamaConfig, PretrainedConfig):
             28: {"window_size": 64},
             29: {"window_size": 64},
             30: {"window_size": 64},
-            31: {"window_size": 16},
+            31: {"window_size": 64},
         },
         **kwargs,
     ):
