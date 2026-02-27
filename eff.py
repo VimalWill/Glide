@@ -41,7 +41,7 @@ liger_configuration: Optional[Dict] = {
             29: {"window_size": 64},
             30: {"window_size": 64},
             31: {"window_size": 64},
-        },
+        }
 
 Glide_w_4_configuration: Optional[Dict] = {
             0:  {"window_size": 48},
@@ -76,7 +76,7 @@ Glide_w_4_configuration: Optional[Dict] = {
             29: {"window_size": 48},
             30: {"window_size": 48},
             31: {"window_size": 48},
-        },
+        }
 
 Glide_w_2_configuration: Optional[Dict] = {
             0:  {"window_size": 32},
@@ -111,7 +111,7 @@ Glide_w_2_configuration: Optional[Dict] = {
             29: {"window_size": 32},
             30: {"window_size": 32},
             31: {"window_size": 32},
-        },
+        }
 
 Glide_3w_4_configuration: Optional[Dict] = {
             0:  {"window_size": 16},
@@ -146,7 +146,7 @@ Glide_3w_4_configuration: Optional[Dict] = {
             29: {"window_size": 16},
             30: {"window_size": 16},
             31: {"window_size": 16},
-        },
+        }
 
 N_RUNS = 5
 EXPIR_ID = "window_0"
