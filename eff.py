@@ -194,13 +194,12 @@ all_results = []
 
 for config in model_configs:
     print(f"\n===== Testing {config['name']} =====")
-    if config["cls"] is GlideForCausalLM and config["layer_config"] is not None:
-        config_gl = GlideConfig(
-            layer_delta_configuration=config["layer_config"]
-        )
-        model = config["cls"].from_pretrained(config["path"], torch_dtype=torch.bfloat16, config=config_gl).to(device).eval()
-    else:
-        model = config["cls"].from_pretrained(config["path"], torch_dtype=torch.bfloat16).to(device).eval()
+    model = config["cls"].from_pretrained(config["path"], torch_dtype=torch.bfloat16).to(device).eval()
+    if config["layer_config"] is not None:
+        for layer_idx, layer_cfg in config["layer_config"].items():
+            attn = model.model.layers[layer_idx].self_attn
+            if hasattr(attn, "window_size"):
+                attn.window_size = layer_cfg["window_size"]
     tokenizer = AutoTokenizer.from_pretrained(config["path"])
 
     results = []
