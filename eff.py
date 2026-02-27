@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM, GlideConfig
 import os
 from tqdm import tqdm
@@ -195,9 +195,10 @@ all_results = []
 for config in model_configs:
     print(f"\n===== Testing {config['name']} =====")
     if config["cls"] is GlideForCausalLM and config["layer_config"] is not None:
-        glide_cfg = GlideConfig.from_pretrained(config["path"])
-        glide_cfg.layer_delta_configuration = config["layer_config"]
-        model = GlideForCausalLM.from_pretrained(config["path"], config=glide_cfg, torch_dtype=torch.bfloat16).to(device).eval()
+        config_gl = GlideConfig(
+            layer_delta_configuration=config["layer_config"]
+        )
+        model = config["cls"].from_pretrained(config["path"], torch_dtype=torch.bfloat16, config=config_gl).to(device).eval()
     else:
         model = config["cls"].from_pretrained(config["path"], torch_dtype=torch.bfloat16).to(device).eval()
     tokenizer = AutoTokenizer.from_pretrained(config["path"])
@@ -206,6 +207,7 @@ for config in model_configs:
 
     # warmup
     input_ids = tokenizer(prompt_text, return_tensors="pt")["input_ids"].to(device)
+    prompt_len = input_ids.shape[1]
     with torch.no_grad():
         model.generate(input_ids, max_new_tokens=10, do_sample=False)
     torch.cuda.synchronize()
@@ -241,7 +243,7 @@ for config in model_configs:
         latency_std  = np.std(run_latencies)
         max_mem_gb = torch.cuda.max_memory_allocated() / 1024 ** 3
         tps_mean = gen_len / latency_mean
-        softmax_attn_bytes = estimate_softmax_attn_memory_bytes(config["layer_config"], gen_len)
+        softmax_attn_bytes = estimate_softmax_attn_memory_bytes(config["layer_config"], prompt_len + gen_len)
 
         print(f"{config['name']} | Tokens: {gen_len}, Time: {latency_mean:.2f}±{latency_std:.3f}s, TPS: {tps_mean:.1f}, Mem: {max_mem_gb:.2f}GB, SoftmaxAttnMem: {softmax_attn_bytes/1024**3:.4f}GB")
         results.append((config["name"], gen_len, latency_mean, latency_std, tps_mean, max_mem_gb, softmax_attn_bytes))
