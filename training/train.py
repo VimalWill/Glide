@@ -38,13 +38,20 @@ def train(config):
     elif config.model.name == "liger_gla":
         from glide_exp.llama.glide_llama_modelling import GlideConfig
         liger_model_config = GlideConfig()
+    elif config.model.name == "liger_mistral_gla":
+        from glide_exp.mistral.glide_mistral_modelling.glide_config import GlideMistralConfig
+        liger_model_config = GlideMistralConfig()
     else:
         raise NotImplementedError(config.model.name)
-
-    liger_model_config.__dict__.update(model_config.__dict__)
-    if hasattr(config.model, "attn_varient"):
-        liger_model_config.attn_varient = config.model.attn_varient
-    model_config = liger_model_config
+    
+    if config.model.name == "liger_gla":
+        liger_model_config.__dict__.update(model_config.__dict__)
+        if hasattr(config.model, "attn_varient"):
+            liger_model_config.attn_varient = config.model.attn_varient
+        model_config = liger_model_config
+    elif config.model.name == "liger_mistral_gla":
+        liger_model_config.__dict__.update(model_config.__dict__)
+        model_config = liger_model_config
 
     model = AutoModelForCausalLM.from_pretrained(
         config.model.pretrained_model_name_or_path, 
