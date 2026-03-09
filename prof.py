@@ -15,7 +15,7 @@ from einops import rearrange, repeat
 
 
 from time import time
-from time import sleep
+
 
 import torch
 import torch.nn as nn
@@ -130,6 +130,7 @@ class LigerAttention(nn.Module):
 
         self.window_size = window_size
         self.time_io = None
+        self.time_kv_io = None
         self.time_compute_softmax_attn = None
         self.time_compute_li_attn = None
         self.time_combination = None
@@ -153,6 +154,10 @@ class LigerAttention(nn.Module):
         torch.cuda.synchronize()
         t_io_start = time()
         q = self.q_proj(hidden_states)
+        q = rearrange(q, 'b n (h d) -> b h n d', h=self.num_heads)
+        torch.cuda.synchronize()
+        t_q_end = time()
+
         k = self.k_proj(hidden_states)
         v = self.v_proj(hidden_states)
         g = self.pool_g(k)
@@ -161,7 +166,6 @@ class LigerAttention(nn.Module):
         if attention_mask is not None:
             v = v.mul_(attention_mask[:, -v.shape[-2]:, None])
 
-        q = rearrange(q, 'b n (h d) -> b h n d', h=self.num_heads)
         k = rearrange(k, 'b n (h d) -> b h n d', h=self.num_key_value_heads)
         v = rearrange(v, 'b n (h d) -> b h n d', h=self.num_key_value_heads)
         g = rearrange(g, 'b n (h m) -> b h n m', h=self.num_key_value_heads)
@@ -253,7 +257,8 @@ class LigerAttention(nn.Module):
         o = self.o_proj(o)
 
         # update latency breakdown
-        self.time_io = t_io_end - t_io_start
+        self.time_io = t_q_end - t_io_start
+        self.time_kv_io = t_io_end - t_q_end
         self.time_compute_li_attn = t_li_end - t_li_start
         self.time_compute_softmax_attn = t_sa_end - t_sa_start
         self.time_combination = t_com_end - t_com_start
@@ -282,11 +287,12 @@ def print_latency_breakdown(hidden_size=512, num_heads=8, seq_len=512, batch_siz
             attn(hidden_states, position_ids=position_ids, position_embeddings=position_embeddings)
 
     # measure
-    times = {"io": 0.0, "li_attn": 0.0, "sa_attn": 0.0, "combo": 0.0}
+    times = {"q_io": 0.0, "kv_io": 0.0, "li_attn": 0.0, "sa_attn": 0.0, "combo": 0.0}
     with torch.no_grad():
         for _ in range(runs):
             attn(hidden_states, position_ids=position_ids, position_embeddings=position_embeddings)
-            times["io"]      += attn.time_io
+            times["q_io"]    += attn.time_io
+            times["kv_io"]   += attn.time_kv_io
             times["li_attn"] += attn.time_compute_li_attn
             times["sa_attn"] += attn.time_compute_softmax_attn
             times["combo"]   += attn.time_combination
@@ -296,19 +302,23 @@ def print_latency_breakdown(hidden_size=512, num_heads=8, seq_len=512, batch_siz
 
     total = sum(times.values())
     print(f"\nLatency Breakdown  (window={window_size}, B={batch_size}, L={seq_len}, H={hidden_size}, heads={num_heads}, avg over {runs} runs)")
-    print(f"  IO  (projections):       {times['io']*1e3:7.3f} ms  ({times['io']/total*100:5.1f}%)")
+    print(f"  Q  proj:                 {times['q_io']*1e3:7.3f} ms  ({times['q_io']/total*100:5.1f}%)")
+    print(f"  KV retrieval (k+v+g):    {times['kv_io']*1e3:7.3f} ms  ({times['kv_io']/total*100:5.1f}%)")
     print(f"  Linear attn  (GLA):      {times['li_attn']*1e3:7.3f} ms  ({times['li_attn']/total*100:5.1f}%)")
     print(f"  Softmax attn (window):   {times['sa_attn']*1e3:7.3f} ms  ({times['sa_attn']/total*100:5.1f}%)")
     print(f"  Combination  (0.5+0.5):  {times['combo']*1e3:7.3f} ms  ({times['combo']/total*100:5.1f}%)")
     print(f"  {'─'*45}")
-    print(f"  Total (4 parts):         {total*1e3:7.3f} ms")
+    print(f"  Total (5 parts):         {total*1e3:7.3f} ms")
 
 
 if __name__ == "__main__":
-    for ws in [64, 48, 32, 16]:
-        print_latency_breakdown(window_size=ws)
-
-    sleep(10.0) # sleep for 10s
-    
-    for ws in [512, 256, 128, 64]:
-        print_latency_breakdown(window_size=ws)
+    # Llama-3-8B config, realistic seq lengths
+    for seq_len in [512, 1024, 2048, 4096]:
+        for ws in [64, 48, 32, 16]:
+            print_latency_breakdown(
+                hidden_size=4096,
+                num_heads=32,
+                num_key_value_heads=8,
+                seq_len=seq_len,
+                window_size=ws,
+            )
