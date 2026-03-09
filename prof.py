@@ -265,13 +265,15 @@ class LigerAttention(nn.Module):
 
         return o, None, past_key_value
 
-def print_latency_breakdown(hidden_size=512, num_heads=8, seq_len=512, batch_size=1, window_size=64, warmup=3, runs=10):
+def print_latency_breakdown(hidden_size=512, num_heads=8, num_key_value_heads=None, seq_len=512, batch_size=1, window_size=64, warmup=3, runs=10):
     device = 'cuda'
+    if num_key_value_heads is None:
+        num_key_value_heads = num_heads
 
     glide_config = GlideConfig(
         hidden_size=hidden_size,
         num_attention_heads=num_heads,
-        num_key_value_heads=num_heads,
+        num_key_value_heads=num_key_value_heads,
     )
 
     attn = LigerAttention(glide_config, layer_idx=0, window_size=window_size).to(device=device, dtype=torch.bfloat16).eval()
