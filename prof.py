@@ -129,6 +129,7 @@ class LigerAttention(nn.Module):
         self.pool_g = nn.AdaptiveAvgPool1d(output_size=self.head_dim * self.num_key_value_heads)
 
         self.window_size = window_size
+        self.block_mask_cache = {}
         self.time_io = None
         self.time_kv_io = None
         self.time_compute_softmax_attn = None
@@ -244,6 +245,7 @@ class LigerAttention(nn.Module):
             sq, sk, sv,
             window_size=self.window_size,
             causal=True,
+            block_mask_cache=self.block_mask_cache,
         )
         torch.cuda.synchronize()
         t_sa_end = time()
