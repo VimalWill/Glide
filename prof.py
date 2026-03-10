@@ -67,10 +67,12 @@ from torch.nn.attention.flex_attention import flex_attention, create_block_mask
 
 logger = logging.get_logger(__name__)
 
+_compiled_flex_attention = torch.compile(flex_attention)
+
 
 def sliding_window_attention(
     q: torch.Tensor,
-    k: torch.Tensor, 
+    k: torch.Tensor,
     v: torch.Tensor,
     window_size: int = 1024,
     causal: bool = True,
@@ -80,7 +82,7 @@ def sliding_window_attention(
 
     B, H, L, D = q.shape
     device = q.device
-    
+
     if causal:
         def mask_mod(b, h, q_idx, kv_idx):
             causal_mask = q_idx >= kv_idx
@@ -89,7 +91,7 @@ def sliding_window_attention(
     else:
         def mask_mod(b, h, q_idx, kv_idx):
             return torch.abs(q_idx - kv_idx) <= window_size
-        
+
     cache_key = (B, H, L, window_size, causal, device)
     if block_mask_cache is not None and cache_key in block_mask_cache:
         block_mask = block_mask_cache[cache_key]
@@ -97,8 +99,8 @@ def sliding_window_attention(
         block_mask = create_block_mask(mask_mod, B, H, L, L, device=device)
         if block_mask_cache is not None:
             block_mask_cache[cache_key] = block_mask
-    
-    output = torch.compile(flex_attention)(q, k, v, block_mask=block_mask, scale=scale)
+
+    output = _compiled_flex_attention(q, k, v, block_mask=block_mask, scale=scale)
     return output
 
 class LigerAttention(nn.Module):

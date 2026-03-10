@@ -2,7 +2,7 @@
   "hidden_size": 4096,
   "num_heads": 32,
   "num_key_value_heads": 8,
-  "seq_len": 2048,
+  "seq_len": 16384,
   "batch_size": 1,
   "warmup": 3,
   "runs": 10,
