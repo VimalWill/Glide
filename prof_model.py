@@ -1,7 +1,6 @@
 from time import time
 import json
 import torch
-from torch.profiler import profile, ProfilerActivity
 from transformers import AutoTokenizer
 
 import glide_exp.llama.glide_llama_modelling  # triggers AutoModel registration
@@ -90,8 +89,8 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
 
     prompts = [
-        "The quick brown fox jumps over the lazy dog. " * 20,   # ~200 tokens
-        "The quick brown fox jumps over the lazy dog. " * 100,  # ~1000 tokens
+        "The quick brown fox jumps over the lazy dog. " * 10,  # ~100 tokens
+        "The quick brown fox jumps over the lazy dog. " * 50,  # ~500 tokens
     ]
     n_tokens = 500
     warmup_prompt = "Hello world. " * 10
@@ -104,10 +103,8 @@ def main():
 
     results = []
     for prompt in prompts:
-        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
-            row = estimate_e2e_latency(model, tokenizer, prompt, n_tokens)
-        row["prof_breakdown_ms"] = parse_prof_averages(prof)
-        print(json.dumps(row, indent=2))
+        row = estimate_e2e_latency(model, tokenizer, prompt, n_tokens)
+        print(json.dumps({k: v for k, v in row.items() if k != "per_token_ms"}, indent=2))
         results.append(row)
 
     with open("prof_model_results.json", "w") as f:
