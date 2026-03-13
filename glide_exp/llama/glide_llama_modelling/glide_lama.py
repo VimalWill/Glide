@@ -1,6 +1,7 @@
 import math
 import warnings
 import copy
+from time import time
 from typing import List, Optional, Tuple, Union
 from einops import rearrange, repeat
 
@@ -100,6 +101,9 @@ class LigerAttention(nn.Module):
         self.pool_g = nn.AdaptiveAvgPool1d(output_size=self.head_dim * self.num_key_value_heads)
 
         self.window_size = window_size
+        self.profiling = False
+        self.time_li_attn = 0.0
+        self.time_sa_attn = 0.0
 
     def forward(
         self,
@@ -153,7 +157,13 @@ class LigerAttention(nn.Module):
             o_, recurrent_state = chunk_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)
         else:
             with record_function("ln_attn"):
+                if self.profiling:
+                    torch.cuda.synchronize()
+                    _t0 = time()
                 o_, recurrent_state = fused_recurrent_gla(q, k, v, g, scale=scale, initial_state=recurrent_state, output_final_state=True)
+                if self.profiling:
+                    torch.cuda.synchronize()
+                    self.time_li_attn = time() - _t0
 
         if past_key_value is not None:
             past_key_value.update(
@@ -195,11 +205,17 @@ class LigerAttention(nn.Module):
             sv = sv.to(target_dtype)
 
         with record_function("SWA"):
+            if self.profiling:
+                torch.cuda.synchronize()
+                _t0 = time()
             y = sliding_window_attention(
                 sq, sk, sv,
                 window_size=self.window_size,
                 causal=True,
             )
+            if self.profiling:
+                torch.cuda.synchronize()
+                self.time_sa_attn = time() - _t0
 
         with record_function("combine"):
             o_ = 0.5 * y + 0.5 * o_
