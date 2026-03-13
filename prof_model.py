@@ -55,7 +55,7 @@ def parse_prof_averages(prof):
     for evt in prof.key_averages():
         if evt.key.startswith("#") or not evt.key[0].isalpha():
             continue
-        out[evt.key] = round(evt.cuda_time_total / 1e3, 3)  # us -> ms
+        out[evt.key] = round(evt.self_cuda_time_total / 1e3, 3)  # us -> ms
     return out
 
 
