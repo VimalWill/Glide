@@ -1,7 +1,7 @@
 from time import time
 import json
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer
 
 import glide_exp.llama.glide_llama_modelling  # triggers AutoModel registration
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM
@@ -55,7 +55,7 @@ def main():
     tokenizer_path = "meta-llama/Meta-Llama-3-8B"
 
     print(f"Loading model from {glide_path} ...")
-    model = AutoModelForCausalLM.from_pretrained(
+    model = GlideForCausalLM.from_pretrained(
         glide_path,
         torch_dtype=torch.bfloat16,
         device_map="cuda",
