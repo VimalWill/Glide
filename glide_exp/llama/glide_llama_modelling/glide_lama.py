@@ -35,9 +35,13 @@ from fla.ops.gla import chunk_gla, fused_recurrent_gla
 from torch.nn.attention.flex_attention import flex_attention, create_block_mask
 
 from .glide_config import GlideConfig
+from torch.profiler import profile, record_function, ProfilerActivity
 
 logger = logging.get_logger(__name__)
-
+prof = profile(
+    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], 
+    profile_memory=True
+)
 
 def sliding_window_attention(
     q: torch.Tensor,
@@ -152,7 +156,9 @@ class LigerAttention(nn.Module):
         if self.training:
             o_, recurrent_state = chunk_gla(q=q, k=k, v=v, g=g, scale=scale, initial_state=recurrent_state, output_final_state=True)
         else:
-            o_, recurrent_state = fused_recurrent_gla(q, k, v, g, scale=scale, initial_state=recurrent_state, output_final_state=True)
+            with prof:
+                with record_function("ln_attn"):
+                    o_, recurrent_state = fused_recurrent_gla(q, k, v, g, scale=scale, initial_state=recurrent_state, output_final_state=True)
 
         if past_key_value is not None:
             past_key_value.update(
@@ -193,12 +199,17 @@ class LigerAttention(nn.Module):
             sk = sk.to(target_dtype)
             sv = sv.to(target_dtype)
 
-        y = sliding_window_attention(
-            sq, sk, sv,
-            window_size=self.window_size,
-            causal=True,
-        )
-        o_ = 0.5 * y + 0.5 * o_ 
+        with prof:
+            with record_function("SWA"):
+                y = sliding_window_attention(
+                    sq, sk, sv,
+                    window_size=self.window_size,
+                    causal=True,
+                )
+        
+        with prof:
+            with record_function("combine"):
+                o_ = 0.5 * y + 0.5 * o_ 
         o = rearrange(o_.to(self.o_proj.weight.dtype), 'b h n d -> b n (h d)')
         o = self.o_proj(o)
 

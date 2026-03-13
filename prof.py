@@ -306,13 +306,18 @@ def print_latency_breakdown(hidden_size=512, num_heads=8, num_key_value_heads=No
         times[k] /= runs
 
     total = sum(times.values())
+
+    flops = estimate_flops(hidden_size, num_heads, num_key_value_heads, seq_len, batch_size, window_size)
+    total_flops = sum(flops.values())
+    total_tflops = (total_flops / total) / 1e12 if total > 0 else 0.0
+
     print(f"\nLatency Breakdown  (window={window_size}, B={batch_size}, L={seq_len}, H={hidden_size}, heads={num_heads}, avg over {runs} runs)")
     print(f"  KV I/O       (k+v+g):    {times['kv_io']*1e3:7.3f} ms  ({times['kv_io']/total*100:5.1f}%)")
     print(f"  Linear Attn  (GLA):      {times['li_attn']*1e3:7.3f} ms  ({times['li_attn']/total*100:5.1f}%)")
     print(f"  SWA          (window):   {times['sa_attn']*1e3:7.3f} ms  ({times['sa_attn']/total*100:5.1f}%)")
     print(f"  Combine      (0.5+0.5):  {times['combo']*1e3:7.3f} ms  ({times['combo']/total*100:5.1f}%)")
     print(f"  {'─'*45}")
-    print(f"  Total (4 parts):         {total*1e3:7.3f} ms")
+    print(f"  Total:                   {total*1e3:7.3f} ms  |  {total_flops/1e9:.2f} GFLOPs  |  {total_tflops:.2f} TFLOP/s")
 
     return {
         "window_size": window_size,
@@ -322,40 +327,119 @@ def print_latency_breakdown(hidden_size=512, num_heads=8, num_key_value_heads=No
         "num_heads": num_heads,
         "num_key_value_heads": num_key_value_heads,
         "runs": runs,
-        "kv_io_ms":   round(times["kv_io"]   * 1e3, 4),
-        "li_attn_ms": round(times["li_attn"] * 1e3, 4),
-        "sa_attn_ms": round(times["sa_attn"] * 1e3, 4),
-        "combo_ms":   round(times["combo"]   * 1e3, 4),
-        "total_ms":   round(total             * 1e3, 4),
+        "kv_io_ms":     round(times["kv_io"]   * 1e3, 4),
+        "li_attn_ms":   round(times["li_attn"] * 1e3, 4),
+        "sa_attn_ms":   round(times["sa_attn"] * 1e3, 4),
+        "combo_ms":     round(times["combo"]   * 1e3, 4),
+        "total_ms":     round(total             * 1e3, 4),
+        "total_gflops": round(total_flops       / 1e9, 4),
+        "total_tflops": round(total_tflops,             4),
+    }
+
+def estimate_flops(hidden_size, num_heads, num_key_value_heads, seq_len, batch_size, window_size):
+    """
+    FLOPs counted as multiply-adds × 2.
+
+    KV I/O  : k_proj + v_proj + pool_g  (3 linear layers over kv heads)
+    GLA     : recurrent state update (outer product k*v^T) + gating + output query (q*S)
+              per head per token ≈ 4 * head_dim^2
+    SWA     : QK^T + softmax·V  (each token attends to `window_size` tokens)
+              per head ≈ 4 * L * window_size * head_dim
+    Combine : elementwise 0.5*y + 0.5*o_  → 2 * B * L * hidden_size
+    """
+    B, L, H, Hkv = batch_size, seq_len, num_heads, num_key_value_heads
+    D = hidden_size // H           # head dim
+
+    # KV I/O: k_proj + v_proj + pool_g — each is (hidden_size → Hkv*D) linear
+    kv_proj_flops = 3 * 2 * B * L * hidden_size * (Hkv * D)
+
+    # GLA: fused_recurrent with H heads, head_dim D
+    # per head per token: outer product (2*D^2) + gate (D^2) + output (2*D^2) ≈ 5*D^2
+    gla_flops = 5 * 2 * B * H * L * D * D   # ×2 for mul-add
+
+    # SWA: QK^T and AV each = 2 * B * H * L * window_size * D
+    swa_flops = 4 * B * H * L * window_size * D
+
+    # Combine: two scalar multiplies + add per element
+    combine_flops = 3 * B * L * hidden_size
+
+    return {
+        "kv_io":   kv_proj_flops,
+        "li_attn": gla_flops,
+        "sa_attn": swa_flops,
+        "combo":   combine_flops,
     }
 
 
+
+
+
 if __name__ == "__main__":
-    import json
+    import json, argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--flops-only", action="store_true", help="estimate FLOPs without running GPU")
+    args = parser.parse_args()
 
     config_path = "prof_config.json"
     with open(config_path) as f:
         cfg = json.load(f)
 
-    results = []
-    for ws_key, fracs in cfg["window_sizes"].items():
-        for frac in fracs:
-            row = print_latency_breakdown(
-                hidden_size=cfg["hidden_size"],
-                num_heads=cfg["num_heads"],
-                num_key_value_heads=cfg["num_key_value_heads"],
-                seq_len=cfg["seq_len"],
-                batch_size=cfg["batch_size"],
-                window_size=frac,
-                warmup=cfg["warmup"],
-                runs=cfg["runs"],
-            )
-            row["window_group"] = int(ws_key)
-            results.append(row)
+    B   = cfg["batch_size"]
+    H   = cfg["hidden_size"]
+    Nh  = cfg["num_heads"]
+    Nkv = cfg["num_key_value_heads"]
+    L   = cfg["seq_len"]
 
-    out_path = "prof_results.json"
-    with open(out_path, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"\nSaved {len(results)} entries to {out_path}")
+    if args.flops_only:
+        # KV I/O bytes per token: load K + V cache for the sliding window (bf16 = 2 bytes)
+        # Cache stored with Nkv heads; multiply by num_layers for whole-model cost
+        num_layers = cfg.get("num_layers", 1)
+        D = H // Nh   # head dim
+        def kv_io_bytes(window_size):
+            per_layer = 2 * window_size * Nkv * D * 2   # K + V, Nkv heads, D dims, bf16
+            return per_layer, per_layer * num_layers
+
+        results = []
+        print(f"\nKV I/O per token  (hidden={H}, heads={Nh}, kv_heads={Nkv}, head_dim={D}, layers={num_layers})")
+        print(f"  {'window':>8}  {'per-layer B':>12}  {'per-layer MB':>13}  {'whole-model MB':>15}")
+        print(f"  {'─'*57}")
+        for ws_key, fracs in cfg["window_sizes"].items():
+            for frac in fracs:
+                kb_layer, kb_model = kv_io_bytes(frac)
+                print(f"  {frac:>8}  {kb_layer:>12,}  {kb_layer/1e6:>13.3f}  {kb_model/1e6:>15.3f}")
+                results.append({
+                    "window_group":       int(ws_key),
+                    "window_size":        frac,
+                    "kv_io_bytes_layer":  kb_layer,
+                    "kv_io_mb_layer":     round(kb_layer / 1e6, 4),
+                    "kv_io_mb_model":     round(kb_model / 1e6, 4),
+                })
+        out_path = "flops_results.json"
+        with open(out_path, "w") as fh:
+            json.dump(results, fh, indent=2)
+        print(f"\nSaved {len(results)} entries to {out_path}")
+
+    else:
+        results = []
+        for ws_key, fracs in cfg["window_sizes"].items():
+            for frac in fracs:
+                row = print_latency_breakdown(
+                    hidden_size=H,
+                    num_heads=Nh,
+                    num_key_value_heads=Nkv,
+                    seq_len=L,
+                    batch_size=B,
+                    window_size=frac,
+                    warmup=cfg["warmup"],
+                    runs=cfg["runs"],
+                )
+                row["window_group"] = int(ws_key)
+                results.append(row)
+
+        out_path = "prof_results.json"
+        with open(out_path, "w") as fh:
+            json.dump(results, fh, indent=2)
+        print(f"\nSaved {len(results)} entries to {out_path}")
 
 

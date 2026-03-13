@@ -1,0 +1,114 @@
+[
+  {
+    "window_group": 64,
+    "window_size": 64,
+    "kv_io_bytes_layer": 262144,
+    "kv_io_mb_layer": 0.2621,
+    "kv_io_mb_model": 8.3886
+  },
+  {
+    "window_group": 64,
+    "window_size": 48,
+    "kv_io_bytes_layer": 196608,
+    "kv_io_mb_layer": 0.1966,
+    "kv_io_mb_model": 6.2915
+  },
+  {
+    "window_group": 64,
+    "window_size": 32,
+    "kv_io_bytes_layer": 131072,
+    "kv_io_mb_layer": 0.1311,
+    "kv_io_mb_model": 4.1943
+  },
+  {
+    "window_group": 64,
+    "window_size": 16,
+    "kv_io_bytes_layer": 65536,
+    "kv_io_mb_layer": 0.0655,
+    "kv_io_mb_model": 2.0972
+  },
+  {
+    "window_group": 128,
+    "window_size": 128,
+    "kv_io_bytes_layer": 524288,
+    "kv_io_mb_layer": 0.5243,
+    "kv_io_mb_model": 16.7772
+  },
+  {
+    "window_group": 128,
+    "window_size": 96,
+    "kv_io_bytes_layer": 393216,
+    "kv_io_mb_layer": 0.3932,
+    "kv_io_mb_model": 12.5829
+  },
+  {
+    "window_group": 128,
+    "window_size": 64,
+    "kv_io_bytes_layer": 262144,
+    "kv_io_mb_layer": 0.2621,
+    "kv_io_mb_model": 8.3886
+  },
+  {
+    "window_group": 128,
+    "window_size": 32,
+    "kv_io_bytes_layer": 131072,
+    "kv_io_mb_layer": 0.1311,
+    "kv_io_mb_model": 4.1943
+  },
+  {
+    "window_group": 512,
+    "window_size": 512,
+    "kv_io_bytes_layer": 2097152,
+    "kv_io_mb_layer": 2.0972,
+    "kv_io_mb_model": 67.1089
+  },
+  {
+    "window_group": 512,
+    "window_size": 384,
+    "kv_io_bytes_layer": 1572864,
+    "kv_io_mb_layer": 1.5729,
+    "kv_io_mb_model": 50.3316
+  },
+  {
+    "window_group": 512,
+    "window_size": 256,
+    "kv_io_bytes_layer": 1048576,
+    "kv_io_mb_layer": 1.0486,
+    "kv_io_mb_model": 33.5544
+  },
+  {
+    "window_group": 512,
+    "window_size": 128,
+    "kv_io_bytes_layer": 524288,
+    "kv_io_mb_layer": 0.5243,
+    "kv_io_mb_model": 16.7772
+  },
+  {
+    "window_group": 1024,
+    "window_size": 1024,
+    "kv_io_bytes_layer": 4194304,
+    "kv_io_mb_layer": 4.1943,
+    "kv_io_mb_model": 134.2177
+  },
+  {
+    "window_group": 1024,
+    "window_size": 768,
+    "kv_io_bytes_layer": 3145728,
+    "kv_io_mb_layer": 3.1457,
+    "kv_io_mb_model": 100.6633
+  },
+  {
+    "window_group": 1024,
+    "window_size": 512,
+    "kv_io_bytes_layer": 2097152,
+    "kv_io_mb_layer": 2.0972,
+    "kv_io_mb_model": 67.1089
+  },
+  {
+    "window_group": 1024,
+    "window_size": 256,
+    "kv_io_bytes_layer": 1048576,
+    "kv_io_mb_layer": 1.0486,
+    "kv_io_mb_model": 33.5544
+  }
+]
