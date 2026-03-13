@@ -13,38 +13,42 @@ def estimate_e2e_latency(model: GlideForCausalLM, tokenizer: AutoTokenizer, prom
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
     prompt_len = input_ids.shape[1]
 
-    with torch.no_grad():
-        # prefill
-        torch.cuda.synchronize()
-        t_prefill_start = time()
-        out = model(input_ids, use_cache=True)
-        torch.cuda.synchronize()
-        t_prefill_end = time()
+    # per_token_ms: one entry per token (prefill tokens + decode tokens)
+    per_token_ms = []
+    past = None
 
-        past = out.past_key_values
+    with torch.no_grad():
+        # prefill — one token at a time to observe per-token latency ramp
+        for i in range(prompt_len):
+            tok = input_ids[:, i:i+1]
+            torch.cuda.synchronize()
+            t0 = time()
+            out = model(tok, past_key_values=past, use_cache=True)
+            torch.cuda.synchronize()
+            per_token_ms.append(round((time() - t0) * 1e3, 3))
+            past = out.past_key_values
+
         next_token = out.logits[:, -1:, :].argmax(dim=-1)
 
-        # decode n_tokens one at a time
-        torch.cuda.synchronize()
-        t_decode_start = time()
+        # decode — one token at a time
         for _ in range(n_tokens):
+            torch.cuda.synchronize()
+            t0 = time()
             out = model(next_token, past_key_values=past, use_cache=True)
+            torch.cuda.synchronize()
+            per_token_ms.append(round((time() - t0) * 1e3, 3))
             past = out.past_key_values
             next_token = out.logits[:, -1:, :].argmax(dim=-1)
-        torch.cuda.synchronize()
-        t_decode_end = time()
 
-    prefill_ms = (t_prefill_end - t_prefill_start) * 1e3
-    decode_ms  = (t_decode_end  - t_decode_start)  * 1e3
-    total_ms   = prefill_ms + decode_ms
-
+    prefill_ms = sum(per_token_ms[:prompt_len])
+    decode_ms  = sum(per_token_ms[prompt_len:])
     return {
         "prompt_tokens":       prompt_len,
         "generated_tokens":    n_tokens,
-        "prefill_ms":          round(prefill_ms, 3),
-        "decode_total_ms":     round(decode_ms, 3),
-        "decode_per_token_ms": round(decode_ms / n_tokens, 3),
-        "total_ms":            round(total_ms, 3),
+        "per_token_ms":        per_token_ms,          # all prompt_len + n_tokens values
+        "prefill_total_ms":    round(prefill_ms, 3),
+        "decode_avg_ms":       round(decode_ms / n_tokens, 3),
+        "total_ms":            round(prefill_ms + decode_ms, 3),
         "throughput_tok_s":    round(n_tokens / (decode_ms / 1e3), 2),
     }
 
@@ -89,7 +93,7 @@ def main():
         "The quick brown fox jumps over the lazy dog. " * 20,   # ~200 tokens
         "The quick brown fox jumps over the lazy dog. " * 100,  # ~1000 tokens
     ]
-    n_tokens = 50
+    n_tokens = 500
     warmup_prompt = "Hello world. " * 10
 
     # warmup (profiler not active)
