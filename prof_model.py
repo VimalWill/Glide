@@ -1,35 +1,25 @@
 from time import time
 import json
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 import glide_exp.llama.glide_llama_modelling  # triggers AutoModel registration
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM
 
 
-def estimate_e2e_latency(model: GlideForCausalLM, tokenizer: AutoTokenizer, prompt: str, n_tokens: int):
+def decode_latency(model, tokenizer, prompt: str, n_tokens: int):
     device = next(model.parameters()).device
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-    prompt_len = input_ids.shape[1]
 
-    # per_token_ms: one entry per token (prefill tokens + decode tokens)
     per_token_ms = []
-    past = None
 
     with torch.no_grad():
-        # prefill — one token at a time to observe per-token latency ramp
-        for i in range(prompt_len):
-            tok = input_ids[:, i:i+1]
-            torch.cuda.synchronize()
-            t0 = time()
-            out = model(tok, past_key_values=past, use_cache=True)
-            torch.cuda.synchronize()
-            per_token_ms.append(round((time() - t0) * 1e3, 3))
-            past = out.past_key_values
-
+        # prefill full prompt in one shot
+        out = model(input_ids, use_cache=True)
+        past = out.past_key_values
         next_token = out.logits[:, -1:, :].argmax(dim=-1)
 
-        # decode — one token at a time
+        # decode one token at a time
         for _ in range(n_tokens):
             torch.cuda.synchronize()
             t0 = time()
@@ -39,36 +29,7 @@ def estimate_e2e_latency(model: GlideForCausalLM, tokenizer: AutoTokenizer, prom
             past = out.past_key_values
             next_token = out.logits[:, -1:, :].argmax(dim=-1)
 
-    prefill_ms = sum(per_token_ms[:prompt_len])
-    decode_ms  = sum(per_token_ms[prompt_len:])
-    return {
-        "prompt_tokens":       prompt_len,
-        "generated_tokens":    n_tokens,
-        "per_token_ms":        per_token_ms,          # all prompt_len + n_tokens values
-        "prefill_total_ms":    round(prefill_ms, 3),
-        "decode_avg_ms":       round(decode_ms / n_tokens, 3),
-        "total_ms":            round(prefill_ms + decode_ms, 3),
-        "throughput_tok_s":    round(n_tokens / (decode_ms / 1e3), 2),
-    }
-
-
-def parse_prof_averages(prof):
-    """Extract CUDA time (ms) for each record_function label."""
-    out = {}
-    events = prof.key_averages()
-    # detect correct attribute name
-    sample = events[0] if events else None
-    cuda_attr = None
-    for attr in ("self_cuda_time_total", "cuda_time_total", "device_time_total", "self_cpu_time_total"):
-        if sample is not None and hasattr(sample, attr):
-            cuda_attr = attr
-            break
-    print(f"[profiler] using attribute: {cuda_attr}")
-    for evt in events:
-        if evt.key.startswith("#") or not evt.key[0].isalpha():
-            continue
-        out[evt.key] = round(getattr(evt, cuda_attr, 0) / 1e3, 3)  # us -> ms
-    return out
+    return per_token_ms
 
 
 def main():
@@ -76,7 +37,6 @@ def main():
     tokenizer_path = "meta-llama/Meta-Llama-3-8B"
 
     print(f"Loading model from {glide_path} ...")
-    from transformers import AutoModelForCausalLM
     model = AutoModelForCausalLM.from_pretrained(
         glide_path,
         torch_dtype=torch.bfloat16,
@@ -84,32 +44,47 @@ def main():
     )
     model.eval()
 
+    # override window size on all attention layers
+    window_size = 20000
+    for layer in model.model.layers:
+        layer.self_attn.window_size = window_size
+    print(f"Window size set to {window_size} on all layers.")
+
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    prompts = [
-        "The quick brown fox jumps over the lazy dog. " * 10,  # ~100 tokens
-        "The quick brown fox jumps over the lazy dog. " * 50,  # ~500 tokens
-    ]
     n_tokens = 500
-    warmup_prompt = "Hello world. " * 10
 
-    # warmup (profiler not active)
-    print("Warming up ...")
+    # warmup with a long prompt to compile flex_attention at the target seq length
+    warmup_prompt = "The quick brown fox jumps over the lazy dog. " * 2200
+    print("Warming up (long prefill + 50 decode steps) ...")
     with torch.no_grad():
         ids = tokenizer(warmup_prompt, return_tensors="pt").input_ids.to("cuda")
-        model(ids, use_cache=True)
+        out = model(ids, use_cache=True)
+        past = out.past_key_values
+        tok = out.logits[:, -1:, :].argmax(dim=-1)
+        for _ in range(50):
+            out = model(tok, past_key_values=past, use_cache=True)
+            past = out.past_key_values
+            tok = out.logits[:, -1:, :].argmax(dim=-1)
+    torch.cuda.synchronize()
+    print("Warmup done.")
 
-    results = []
-    for prompt in prompts:
-        row = estimate_e2e_latency(model, tokenizer, prompt, n_tokens)
-        print(json.dumps({k: v for k, v in row.items() if k != "per_token_ms"}, indent=2))
-        results.append(row)
+    prompts = {
+        "prompt_20k": "The quick brown fox jumps over the lazy dog. " * 2200,
+    }
+
+    results = {}
+    for name, prompt in prompts.items():
+        per_token_ms = decode_latency(model, tokenizer, prompt, n_tokens)
+        avg = round(sum(per_token_ms) / len(per_token_ms), 3)
+        print(f"{name}: avg={avg} ms/tok  min={min(per_token_ms)}  max={max(per_token_ms)}")
+        results[name] = per_token_ms
 
     with open("prof_model_results.json", "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nSaved {len(results)} entries to prof_model_results.json")
+    print(f"\nSaved to prof_model_results.json")
 
 
 if __name__ == "__main__":
