@@ -50,12 +50,21 @@ def estimate_e2e_latency(model: GlideForCausalLM, tokenizer: AutoTokenizer, prom
 
 
 def parse_prof_averages(prof):
-    """Extract cuda_time_total (ms) for each record_function label."""
+    """Extract CUDA time (ms) for each record_function label."""
     out = {}
-    for evt in prof.key_averages():
+    events = prof.key_averages()
+    # detect correct attribute name
+    sample = events[0] if events else None
+    cuda_attr = None
+    for attr in ("self_cuda_time_total", "cuda_time_total", "device_time_total", "self_cpu_time_total"):
+        if sample is not None and hasattr(sample, attr):
+            cuda_attr = attr
+            break
+    print(f"[profiler] using attribute: {cuda_attr}")
+    for evt in events:
         if evt.key.startswith("#") or not evt.key[0].isalpha():
             continue
-        out[evt.key] = round(evt.self_cuda_time_total / 1e3, 3)  # us -> ms
+        out[evt.key] = round(getattr(evt, cuda_attr, 0) / 1e3, 3)  # us -> ms
     return out
 
 
