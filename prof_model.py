@@ -1,10 +1,10 @@
 from time import time
 import json
 import torch
+from torch.profiler import profile, ProfilerActivity
 from transformers import AutoTokenizer
 
 import glide_exp.llama.glide_llama_modelling  # triggers AutoModel registration
-from glide_exp.llama.glide_llama_modelling.glide_lama import prof as glide_prof
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM
 
 
@@ -91,8 +91,9 @@ def main():
 
     results = []
     for prompt in prompts:
-        row = estimate_e2e_latency(model, tokenizer, prompt, n_tokens)
-        row["prof_breakdown_ms"] = parse_prof_averages(glide_prof)
+        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+            row = estimate_e2e_latency(model, tokenizer, prompt, n_tokens)
+        row["prof_breakdown_ms"] = parse_prof_averages(prof)
         print(json.dumps(row, indent=2))
         results.append(row)
 
