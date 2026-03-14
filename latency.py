@@ -99,6 +99,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-tokens", type=int, default=500)
     parser.add_argument("--prompt", type=str, default=DEFAULT_PROMPT)
     parser.add_argument("--out", type=str, default="latency_results.csv")
+    parser.add_argument("--rounds", type=int, default=1)
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint)
@@ -106,25 +107,24 @@ if __name__ == "__main__":
     model = model.cuda().eval()
 
     ws = args.window_size or "model_default"
-    latencies = estimate_decode_stage_per_token_latency(
-        model, tokenizer,
-        prompt=args.prompt,
-        n_tokens=args.n_tokens,
-        window_size=args.window_size,
-    )
-
-    mean_ms = sum(latencies) / len(latencies)
-    print(f"Window size   : {ws}")
-    print(f"Mean latency  : {mean_ms:.2f} ms/tok  ({1000/mean_ms:.1f} tok/s)")
-
     write_header = not os.path.exists(args.out)
+
     with open(args.out, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["token_idx", "latency_ms"])
+        writer = csv.DictWriter(f, fieldnames=["round", "token_idx", "latency_ms"])
         if write_header:
             writer.writeheader()
-        for i, lat in enumerate(latencies):
-            writer.writerow({
-                "token_idx": i,
-                "latency_ms": round(lat, 4),
-            })
-    print(f"Saved {len(latencies)} rows to {args.out}")
+
+        for r in range(args.rounds):
+            print(f"\n--- Round {r+1}/{args.rounds} | window={ws} ---")
+            latencies = estimate_decode_stage_per_token_latency(
+                model, tokenizer,
+                prompt=args.prompt,
+                n_tokens=args.n_tokens,
+                window_size=args.window_size,
+            )
+            mean_ms = sum(latencies) / len(latencies)
+            print(f"Mean: {mean_ms:.2f} ms/tok  ({1000/mean_ms:.1f} tok/s)")
+            for i, lat in enumerate(latencies):
+                writer.writerow({"round": f"round {r+1}", "token_idx": i, "latency_ms": round(lat, 4)})
+
+    print(f"\nSaved to {args.out}")
