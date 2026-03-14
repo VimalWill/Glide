@@ -154,13 +154,6 @@ class LigerAttention(nn.Module):
         else:
             o_, recurrent_state = fused_recurrent_gla(q, k, v, g, scale=scale, initial_state=recurrent_state, output_final_state=True)
 
-        if past_key_value is not None:
-            past_key_value.update(
-                recurrent_state=recurrent_state,
-                layer_idx=self.layer_idx,
-                offset=q.shape[1]
-            )
-        
         if position_embeddings is None:
             logger.warning_once(
                 "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
@@ -193,12 +186,33 @@ class LigerAttention(nn.Module):
             sk = sk.to(target_dtype)
             sv = sv.to(target_dtype)
 
+        # build sliding window KV buffer from cache
+        if past_key_value is not None and last_state is not None and last_state.get('attn_state') is not None:
+            cached_sk, cached_sv = last_state['attn_state']
+            sk_full = torch.cat([cached_sk, sk], dim=2)
+            sv_full = torch.cat([cached_sv, sv], dim=2)
+            if sk_full.shape[2] > self.window_size:
+                sk_full = sk_full[:, :, -self.window_size:].contiguous()
+                sv_full = sv_full[:, :, -self.window_size:].contiguous()
+        else:
+            sk_full = sk
+            sv_full = sv
+
+        if past_key_value is not None:
+            past_key_value.update(
+                recurrent_state=recurrent_state,
+                attn_state=[sk_full, sv_full],
+                layer_idx=self.layer_idx,
+                offset=q.shape[1],
+                cache_kwargs={'window_size': self.window_size},
+            )
+
         y = sliding_window_attention(
-            sq, sk, sv,
+            sq, sk_full, sv_full,
             window_size=self.window_size,
             causal=True,
         )
-        o_ = 0.5 * y + 0.5 * o_ 
+        o_ = 0.5 * y + 0.5 * o_
         o = rearrange(o_.to(self.o_proj.weight.dtype), 'b h n d -> b n (h d)')
         o = self.o_proj(o)
 
