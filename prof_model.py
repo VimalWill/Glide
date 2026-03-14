@@ -49,8 +49,7 @@ def main():
         max_position_embeddings=131072,
         rope_theta=500000.0,
     )
-    with torch.device("cuda"):
-        model = GlideForCausalLM(config).to(dtype=torch.bfloat16)
+    model = GlideForCausalLM(config).to(dtype=torch.bfloat16, device="cuda")
     model.eval()
 
     # override window size on all attention layers
