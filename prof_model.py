@@ -1,7 +1,7 @@
 from time import time
 import json
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer
 
 import glide_exp.llama.glide_llama_modelling  # triggers AutoModel registration
 from glide_exp.llama.glide_llama_modelling import GlideForCausalLM
@@ -33,15 +33,12 @@ def decode_latency(model, tokenizer, prompt: str, n_tokens: int):
 
 
 def main():
-    glide_path = "/u/vwilliam/Glide/checkpoints/liger/best/"
     tokenizer_path = "meta-llama/Meta-Llama-3-8B"
 
-    print(f"Loading model from {glide_path} ...")
-    model = AutoModelForCausalLM.from_pretrained(
-        glide_path,
-        torch_dtype=torch.bfloat16,
-        device_map="cuda",
-    )
+    print("Initializing model with random weights ...")
+    from glide_exp.llama.glide_llama_modelling.glide_config import GlideConfig
+    config = GlideConfig.from_pretrained(tokenizer_path)
+    model = GlideForCausalLM(config).to(dtype=torch.bfloat16, device="cuda")
     model.eval()
 
     # override window size on all attention layers
