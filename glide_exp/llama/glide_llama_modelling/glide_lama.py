@@ -66,7 +66,7 @@ def sliding_window_attention(
     if block_mask_cache is not None and cache_key in block_mask_cache:
         block_mask = block_mask_cache[cache_key]
     else:
-        block_mask = create_block_mask(mask_mod, B, H, L, L, device=device)
+        block_mask = create_block_mask(mask_mod, None, None, L, L, device=device)
         if block_mask_cache is not None:
             block_mask_cache[cache_key] = block_mask
     
