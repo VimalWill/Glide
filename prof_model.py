@@ -39,8 +39,18 @@ def main():
 
     print("Initializing model with random weights ...")
     from glide_exp.llama.glide_llama_modelling.glide_config import GlideConfig
-    config = GlideConfig.from_pretrained(tokenizer_path)
-    model = GlideForCausalLM(config).to(dtype=torch.bfloat16, device="cuda")
+    config = GlideConfig(
+        hidden_size=4096,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=8,
+        intermediate_size=14336,
+        vocab_size=128256,
+        max_position_embeddings=131072,
+        rope_theta=500000.0,
+    )
+    with torch.device("cuda"):
+        model = GlideForCausalLM(config).to(dtype=torch.bfloat16)
     model.eval()
 
     # override window size on all attention layers
@@ -56,14 +66,14 @@ def main():
     n_tokens = 500
 
     # warmup with a long prompt to compile flex_attention at the target seq length
-    warmup_prompt = "The quick brown fox jumps over the lazy dog. " * 540
-    print("Warming up (long prefill + 50 decode steps) ...")
+    warmup_prompt = "The quick brown fox jumps over the lazy dog. " * 10
+    print("Warming up ...")
     with torch.no_grad():
         ids = tokenizer(warmup_prompt, return_tensors="pt").input_ids.to("cuda")
         out = model(ids, use_cache=True)
         past = out.past_key_values
         tok = out.logits[:, -1:, :].argmax(dim=-1)
-        for _ in range(50):
+        for _ in range(10):
             out = model(tok, past_key_values=past, use_cache=True)
             past = out.past_key_values
             tok = out.logits[:, -1:, :].argmax(dim=-1)
