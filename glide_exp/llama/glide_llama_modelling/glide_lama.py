@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 
 def sliding_window_attention(
     q: torch.Tensor,
-    k: torch.Tensor, 
+    k: torch.Tensor,
     v: torch.Tensor,
     window_size: int = 1024,
     causal: bool = True,
@@ -49,9 +49,15 @@ def sliding_window_attention(
     block_mask_cache: dict = None
 ) -> torch.Tensor:
 
-    B, H, L, D = q.shape
+    B, H, Q_len, D = q.shape
+    KV_len = k.shape[2]
     device = q.device
-    
+
+    # Non-square (decode with rolling KV buffer): all KV tokens are already
+    # causally valid and within the window (trimmed before calling), so no mask needed.
+    if Q_len != KV_len:
+        return flex_attention(q, k, v, scale=scale)
+
     if causal:
         def mask_mod(b, h, q_idx, kv_idx):
             causal_mask = q_idx >= kv_idx
@@ -60,15 +66,15 @@ def sliding_window_attention(
     else:
         def mask_mod(b, h, q_idx, kv_idx):
             return torch.abs(q_idx - kv_idx) <= window_size
-        
-    cache_key = (B, H, L, window_size, causal, device)
+
+    cache_key = (B, H, Q_len, window_size, causal, device)
     if block_mask_cache is not None and cache_key in block_mask_cache:
         block_mask = block_mask_cache[cache_key]
     else:
-        block_mask = create_block_mask(mask_mod, B, H, L, L, device=device)
+        block_mask = create_block_mask(mask_mod, B, H, Q_len, Q_len, device=device)
         if block_mask_cache is not None:
             block_mask_cache[cache_key] = block_mask
-    
+
     output = flex_attention(q, k, v, block_mask=block_mask, scale=scale)
     return output
 
@@ -201,11 +207,12 @@ class LigerAttention(nn.Module):
         if past_key_value is not None:
             past_key_value.update(
                 recurrent_state=recurrent_state,
-                attn_state=[sk_full, sv_full],
                 layer_idx=self.layer_idx,
-                offset=q.shape[1],
-                cache_kwargs={'window_size': self.window_size},
+                offset=sq.shape[2],
             )
+            # store rolling SW-KV buffer directly — bypass FlaCache's internal
+            # concatenation which assumes (B, L, ...) layout, not (B, H, L, D)
+            past_key_value[self.layer_idx]['attn_state'] = [sk_full, sv_full]
 
         y = sliding_window_attention(
             sq, sk_full, sv_full,
