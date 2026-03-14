@@ -20,12 +20,14 @@ def decode_latency(model, tokenizer, prompt: str, n_tokens: int):
         next_token = out.logits[:, -1:, :].argmax(dim=-1)
 
         # decode one token at a time
-        for _ in range(n_tokens):
+        for i in range(n_tokens):
             torch.cuda.synchronize()
             t0 = time()
             out = model(next_token, past_key_values=past, use_cache=True)
             torch.cuda.synchronize()
-            per_token_ms.append(round((time() - t0) * 1e3, 3))
+            ms = round((time() - t0) * 1e3, 3)
+            per_token_ms.append(ms)
+            print(f"  token {i+1}/{n_tokens}: {ms} ms", flush=True)
             past = out.past_key_values
             next_token = out.logits[:, -1:, :].argmax(dim=-1)
 
@@ -42,7 +44,7 @@ def main():
     model.eval()
 
     # override window size on all attention layers
-    window_size = 20000
+    window_size = 512
     for layer in model.model.layers:
         layer.self_attn.window_size = window_size
     print(f"Window size set to {window_size} on all layers.")
@@ -54,7 +56,7 @@ def main():
     n_tokens = 500
 
     # warmup with a long prompt to compile flex_attention at the target seq length
-    warmup_prompt = "The quick brown fox jumps over the lazy dog. " * 2200
+    warmup_prompt = "The quick brown fox jumps over the lazy dog. " * 540
     print("Warming up (long prefill + 50 decode steps) ...")
     with torch.no_grad():
         ids = tokenizer(warmup_prompt, return_tensors="pt").input_ids.to("cuda")
