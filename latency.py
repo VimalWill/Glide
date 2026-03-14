@@ -27,27 +27,15 @@ def estimate_decode_stage_per_token_latency(
     n_tokens: int = 500,
     warmup: int = 5,
     window_size: int | None = None,
-) -> float:
+) -> list[float]:
     """
-    Estimates per-token latency (ms) for the decode (autoregressive) stage.
+    Returns per-token latency (ms) for each of the `n_tokens` decode steps.
 
     Procedure:
       1. Optionally override window_size on all attention layers.
       2. Tokenize `prompt` and run a prefill pass to build the KV cache.
-      3. Decode one token at a time for `n_tokens` steps, measuring wall-clock
-         time using CUDA events (GPU) or time.perf_counter (CPU).
-      4. Return mean latency in milliseconds, excluding `warmup` steps.
-
-    Args:
-        model:       GlideForCausalLM instance (on device, eval mode).
-        tokenizer:   Matching tokenizer for the model.
-        prompt:      Prefill text (tokenized internally).
-        n_tokens:    Number of decode steps to measure.
-        warmup:      Initial decode steps to discard (Triton autotuner, etc.).
-        window_size: If set, overrides window_size on all attention layers.
-
-    Returns:
-        Mean per-token decode latency in milliseconds.
+      3. Decode one token at a time, measuring each step individually.
+      4. Return list of latencies (warmup steps discarded).
     """
     model.eval()
     device = next(model.parameters()).device
@@ -95,7 +83,7 @@ def estimate_decode_stage_per_token_latency(
             if step >= warmup:
                 latencies.append(elapsed_ms)
 
-    return sum(latencies) / len(latencies)
+    return latencies
 
 
 if __name__ == "__main__":
@@ -105,35 +93,35 @@ if __name__ == "__main__":
     parser.add_argument("checkpoint")
     parser.add_argument("--window-size", type=int, default=None,
                         help="Override attention window size (e.g. 20000)")
-    parser.add_argument("--n-tokens", type=int, default=200)
+    parser.add_argument("--n-tokens", type=int, default=500)
     parser.add_argument("--prompt", type=str, default=DEFAULT_PROMPT)
+    parser.add_argument("--out", type=str, default="latency_results.csv")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint)
     model = GlideForCausalLM.from_pretrained(args.checkpoint, torch_dtype=torch.bfloat16)
     model = model.cuda().eval()
 
-    latency = estimate_decode_stage_per_token_latency(
+    ws = args.window_size or "model_default"
+    latencies = estimate_decode_stage_per_token_latency(
         model, tokenizer,
         prompt=args.prompt,
         n_tokens=args.n_tokens,
         window_size=args.window_size,
     )
-    ws = args.window_size or "model default"
-    print(f"Window size : {ws}")
-    print(f"Decode latency: {latency:.2f} ms/tok  ({1000/latency:.1f} tok/s)")
 
-    csv_path = "latency_results.csv"
-    write_header = not os.path.exists(csv_path)
-    with open(csv_path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["checkpoint", "window_size", "n_tokens", "latency_ms", "throughput_tok_s"])
+    mean_ms = sum(latencies) / len(latencies)
+    print(f"Window size   : {ws}")
+    print(f"Mean latency  : {mean_ms:.2f} ms/tok  ({1000/mean_ms:.1f} tok/s)")
+
+    write_header = not os.path.exists(args.out)
+    with open(args.out, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["token_idx", "latency_ms"])
         if write_header:
             writer.writeheader()
-        writer.writerow({
-            "checkpoint": args.checkpoint,
-            "window_size": ws,
-            "n_tokens": args.n_tokens,
-            "latency_ms": round(latency, 4),
-            "throughput_tok_s": round(1000 / latency, 2),
-        })
-    print(f"Saved to {csv_path}")
+        for i, lat in enumerate(latencies):
+            writer.writerow({
+                "token_idx": i,
+                "latency_ms": round(lat, 4),
+            })
+    print(f"Saved {len(latencies)} rows to {args.out}")
