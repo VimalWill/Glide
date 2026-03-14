@@ -82,6 +82,9 @@ def estimate_decode_stage_per_token_latency(
 
             if step >= warmup:
                 latencies.append(elapsed_ms)
+                print(f"\r  token {len(latencies)}/{n_tokens}  {elapsed_ms:.1f} ms", end="", flush=True)
+
+        print()
 
     return latencies
 
